@@ -1,11 +1,11 @@
-# 2026-10-15 — Keyence SR-1000W: เชื่อมต่อ TCP ตรง (เลิกใช้ Keyence SDK)
+# 2026-10-15 — Keyence SR-X100W: เชื่อมต่อ TCP ตรง (เลิกใช้ Keyence SDK)
 
 **ไฟล์ที่จะแก้:** `Themister_Real/KeyenceScanner.cs`, `Themister_Real/Form2.cs`, `Themister_Real/Themister_Real.csproj`, `.gitignore`, `README.md`
 
 ## เหตุผล
-- SR-1000W ส่งผลการอ่านออกทาง **Data port 9004** เป็นข้อความ ASCII ธรรมดา ปิดท้ายด้วย CR
+- SR-X100W ส่งผลการอ่านออกทาง **Data port 9004** เป็นข้อความ ASCII ธรรมดา ปิดท้ายด้วย CR
   → ใช้ `TcpClient` ของ .NET รับได้เลย ไม่ต้องใช้ SDK
-- Port 9004 **ไม่ใช่ Modbus TCP** (SR-1000W รองรับ TCP/IP, EtherNet/IP, PROFINET — ไม่มี Modbus TCP)
+- Port 9004 **ไม่ใช่ Modbus TCP** (SR-X100W รองรับ TCP/IP, EtherNet/IP, PROFINET, MC protocol, OMRON PLC link, OPC UA — ไม่มี Modbus TCP)
   ถ้าส่งคำสั่ง Modbus ไป port นี้ scanner จะไม่ตอบ จึงใช้ TCP ตรงแทน
 - Keyence SDK ต้องใช้ DLL ประกอบอีก 3 ตัว (`Communication.dll`, `VncClientControlCommon*.dll`) และบังคับ x86
 

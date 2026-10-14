@@ -62,7 +62,7 @@ namespace Themister_Real
         private readonly string lineStationConfigFilePath = Path.Combine(Application.StartupPath, "line_station_config.cfg");
         private readonly string keyenceConfigFilePath = Path.Combine(Application.StartupPath, "keyence_config.cfg");
 
-        // ---------------- Keyence Barcode Scanner (LAN / AutoID SDK) ----------------
+        // ---------------- Keyence Barcode Scanner (SR-X100W / TCP Data Port) ----------------
         private KeyenceScanner keyenceScanner = null;
         private bool isKeyenceConnecting = false;
 
@@ -2083,7 +2083,7 @@ namespace Themister_Real
 
         #endregion
 
-        #region Keyence Barcode Scanner (LAN / AutoID SDK)
+        #region Keyence Barcode Scanner (SR-X100W / TCP Data Port)
 
         private void LoadKeyenceSettings()
         {
@@ -2101,8 +2101,8 @@ namespace Themister_Real
             }
             catch { }
 
-            // ค่า Default จากโรงงานของ Keyence: IP 192.168.100.100, Data Port 9004
-            if (string.IsNullOrEmpty(txtIPKeynce.Text)) txtIPKeynce.Text = "192.168.100.100";
+            // ค่า Default ของ Keyence SR-X100W หน้างาน: IP 192.168.1.99, Data Port 9004
+            if (string.IsNullOrEmpty(txtIPKeynce.Text)) txtIPKeynce.Text = "192.168.1.99";
             if (string.IsNullOrEmpty(txtPortKeynce.Text)) txtPortKeynce.Text = "9004";
         }
 
@@ -2145,11 +2145,21 @@ namespace Themister_Real
             btConnectKeynce.Enabled = false;
             btConnectKeynce.Text = "Connecting...";
 
+            if (keyenceScanner == null)
+            {
+                keyenceScanner = new KeyenceScanner();
+                keyenceScanner.BarcodeReceived += KeyenceScanner_BarcodeReceived;
+                keyenceScanner.Disconnected += KeyenceScanner_Disconnected;
+            }
+
             string error = null;
             try
             {
-                // Connect ของ SDK เป็นแบบ Blocking จึงต้องรันนอก UI Thread
-                error = await Task.Run(() => TryConnectKeyence(ip, dataPort));
+                await keyenceScanner.ConnectAsync(ip, dataPort);
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
             }
             finally
             {
@@ -2174,30 +2184,6 @@ namespace Themister_Real
             }
         }
 
-        // คืนค่า null เมื่อสำเร็จ หรือข้อความ Error เมื่อไม่สำเร็จ
-        // NoInlining: ถ้าเครื่องไม่มี Keyence.AutoID.SDK.dll จะเกิด Exception ในเมธอดนี้ และถูก catch ได้
-        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-        private string TryConnectKeyence(string ip, int dataPort)
-        {
-            try
-            {
-                if (keyenceScanner == null)
-                {
-                    keyenceScanner = new KeyenceScanner();
-                    keyenceScanner.BarcodeReceived += KeyenceScanner_BarcodeReceived;
-                }
-
-                return keyenceScanner.Connect(ip, dataPort) ? null : keyenceScanner.LastError;
-            }
-            catch (Exception ex)
-            {
-                return ex is FileNotFoundException || ex is FileLoadException || ex is BadImageFormatException
-                    ? $"โหลด Keyence SDK ไม่ได้ (ต้องมี Keyence.AutoID.SDK.dll และไฟล์ประกอบวางคู่กับโปรแกรม)\n{ex.Message}"
-                    : ex.Message;
-            }
-        }
-
-        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         private void DisconnectKeyence()
         {
             try
@@ -2216,7 +2202,15 @@ namespace Themister_Real
             txtPortKeynce.Enabled = !isConnected;
         }
 
-        // ถูกเรียกจาก Thread ของ SDK — ต้องส่งกลับไปทำงานบน UI Thread
+        // สาย LAN หลุด / Scanner ดับ — ถูกเรียกจาก Thread เบื้องหลัง
+        private void KeyenceScanner_Disconnected()
+        {
+            if (!this.IsHandleCreated || this.IsDisposed) return;
+
+            this.BeginInvoke(new Action(() => UpdateKeyenceUi(false)));
+        }
+
+        // ถูกเรียกจาก Thread เบื้องหลัง — ต้องส่งกลับไปทำงานบน UI Thread
         private void KeyenceScanner_BarcodeReceived(string barcode)
         {
             if (!this.IsHandleCreated || this.IsDisposed) return;

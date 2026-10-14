@@ -17,6 +17,3 @@ packages/
 
 # backup
 *.bak
-
-# Keyence SDK (proprietary — ก็อปเองจากชุด SDK)
-Themister_Real/lib/
