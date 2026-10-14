@@ -60,6 +60,11 @@ namespace Themister_Real
         private readonly string configFilePath = Path.Combine(Application.StartupPath, "modbus_config.cfg");
         private readonly string mnConfigFilePath = Path.Combine(Application.StartupPath, "mn_address_config.cfg");
         private readonly string lineStationConfigFilePath = Path.Combine(Application.StartupPath, "line_station_config.cfg");
+        private readonly string keyenceConfigFilePath = Path.Combine(Application.StartupPath, "keyence_config.cfg");
+
+        // ---------------- Keyence Barcode Scanner (LAN / AutoID SDK) ----------------
+        private KeyenceScanner keyenceScanner = null;
+        private bool isKeyenceConnecting = false;
 
         // ตัวแปรเก็บ Mapping ระหว่าง Line -> รายชื่อ Station ทั้งหมด
         private readonly Dictionary<string, List<string>> lineStationMap = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
@@ -119,29 +124,7 @@ namespace Themister_Real
 
                     e.Handled = true;
 
-                    Control[] foundBarcode = this.Controls.Find("txtBarcode", true);
-                    if (foundBarcode.Length > 0 && foundBarcode[0] is TextBox txtBarcode)
-                    {
-                        txtBarcode.Text = scannedBarcode;
-                    }
-
-                    if (isSequenceRunning) return;
-
-                    // ตรวจสอบโหมด MES / No MES จาก ComboBox cbMES โดยตรง
-                    string mesMode = cbMES.SelectedItem?.ToString() ?? "MES";
-
-                    if (string.Equals(mesMode, "No MES", StringComparison.OrdinalIgnoreCase))
-                    {
-                        btPLCStart_Click(this, EventArgs.Empty);
-                    }
-                    else
-                    {
-                        bool isRoutingPass = await CheckRoutingAndShowWarningAsync(scannedBarcode);
-                        if (isRoutingPass && !isSequenceRunning)
-                        {
-                            btPLCStart_Click(this, EventArgs.Empty);
-                        }
-                    }
+                    await ProcessScannedBarcodeAsync(scannedBarcode);
                 }
                 return;
             }
@@ -157,6 +140,34 @@ namespace Themister_Real
                 if (elapsed.TotalMilliseconds <= 60 && _barcodeBuffer.Length > 1)
                 {
                     e.Handled = true;
+                }
+            }
+        }
+
+        // ใช้ร่วมกันทั้ง Keyboard Wedge Scanner และ Keyence Scanner (LAN)
+        private async Task ProcessScannedBarcodeAsync(string scannedBarcode)
+        {
+            Control[] foundBarcode = this.Controls.Find("txtBarcode", true);
+            if (foundBarcode.Length > 0 && foundBarcode[0] is TextBox txtBarcode)
+            {
+                txtBarcode.Text = scannedBarcode;
+            }
+
+            if (isSequenceRunning) return;
+
+            // ตรวจสอบโหมด MES / No MES จาก ComboBox cbMES โดยตรง
+            string mesMode = cbMES.SelectedItem?.ToString() ?? "MES";
+
+            if (string.Equals(mesMode, "No MES", StringComparison.OrdinalIgnoreCase))
+            {
+                btPLCStart_Click(this, EventArgs.Empty);
+            }
+            else
+            {
+                bool isRoutingPass = await CheckRoutingAndShowWarningAsync(scannedBarcode);
+                if (isRoutingPass && !isSequenceRunning)
+                {
+                    btPLCStart_Click(this, EventArgs.Empty);
                 }
             }
         }
@@ -402,6 +413,7 @@ namespace Themister_Real
             if (btPLCStart != null) btPLCStart.Click += btPLCStart_Click;
             if (btPLCStop != null) btPLCStop.Click += btPLCStop_Click;
             if (btStepRefresh != null) btStepRefresh.Click += btStepRefresh_Click;
+            if (btConnectKeynce != null) btConnectKeynce.Click += btConnectKeynce_Click;
 
             Control[] foundApiTxt = this.Controls.Find("txtAPI", true);
             if (foundApiTxt.Length > 0 && foundApiTxt[0] is TextBox txtApi)
@@ -638,6 +650,9 @@ namespace Themister_Real
             catch { }
 
             _ = ConnectPlcAsync(isSilent: true);
+
+            LoadKeyenceSettings();
+            _ = ConnectKeyenceAsync(isSilent: true);
 
             StartDmmRealtimeMonitor();
 
@@ -2068,6 +2083,159 @@ namespace Themister_Real
 
         #endregion
 
+        #region Keyence Barcode Scanner (LAN / AutoID SDK)
+
+        private void LoadKeyenceSettings()
+        {
+            try
+            {
+                if (File.Exists(keyenceConfigFilePath))
+                {
+                    string[] lines = File.ReadAllLines(keyenceConfigFilePath);
+                    if (lines.Length >= 2)
+                    {
+                        txtIPKeynce.Text = lines[0].Trim();
+                        txtPortKeynce.Text = lines[1].Trim();
+                    }
+                }
+            }
+            catch { }
+
+            // ค่า Default จากโรงงานของ Keyence: IP 192.168.100.100, Data Port 9004
+            if (string.IsNullOrEmpty(txtIPKeynce.Text)) txtIPKeynce.Text = "192.168.100.100";
+            if (string.IsNullOrEmpty(txtPortKeynce.Text)) txtPortKeynce.Text = "9004";
+        }
+
+        private void SaveKeyenceSettings()
+        {
+            try
+            {
+                File.WriteAllLines(keyenceConfigFilePath, new[] { txtIPKeynce.Text.Trim(), txtPortKeynce.Text.Trim() });
+            }
+            catch { }
+        }
+
+        private async void btConnectKeynce_Click(object sender, EventArgs e)
+        {
+            if (keyenceScanner != null && keyenceScanner.IsConnected)
+            {
+                DisconnectKeyence();
+                MessageBox.Show("ตัดการเชื่อมต่อจาก Keyence Scanner เรียบร้อย", "Keyence Scanner", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            await ConnectKeyenceAsync(isSilent: false);
+        }
+
+        private async Task ConnectKeyenceAsync(bool isSilent)
+        {
+            if (isKeyenceConnecting) return;
+
+            string ip = txtIPKeynce.Text.Trim();
+            if (!IPAddress.TryParse(ip, out _) || !int.TryParse(txtPortKeynce.Text.Trim(), out int dataPort) || dataPort <= 0 || dataPort > 65535)
+            {
+                if (!isSilent)
+                {
+                    MessageBox.Show("กรุณากรอก IP และ Port ของ Keyence Scanner ให้ถูกต้อง", "Keyence Scanner", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+                return;
+            }
+
+            isKeyenceConnecting = true;
+            btConnectKeynce.Enabled = false;
+            btConnectKeynce.Text = "Connecting...";
+
+            string error = null;
+            try
+            {
+                // Connect ของ SDK เป็นแบบ Blocking จึงต้องรันนอก UI Thread
+                error = await Task.Run(() => TryConnectKeyence(ip, dataPort));
+            }
+            finally
+            {
+                isKeyenceConnecting = false;
+                btConnectKeynce.Enabled = true;
+            }
+
+            bool isConnected = error == null;
+            UpdateKeyenceUi(isConnected);
+
+            if (isConnected)
+            {
+                SaveKeyenceSettings();
+                if (!isSilent)
+                {
+                    MessageBox.Show($"เชื่อมต่อ Keyence Scanner ({ip}:{dataPort}) สำเร็จ", "Keyence Scanner", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            }
+            else if (!isSilent)
+            {
+                MessageBox.Show($"เชื่อมต่อ Keyence Scanner ({ip}:{dataPort}) ไม่สำเร็จ:\n{error}", "Keyence Scanner", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        // คืนค่า null เมื่อสำเร็จ หรือข้อความ Error เมื่อไม่สำเร็จ
+        // NoInlining: ถ้าเครื่องไม่มี Keyence.AutoID.SDK.dll จะเกิด Exception ในเมธอดนี้ และถูก catch ได้
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private string TryConnectKeyence(string ip, int dataPort)
+        {
+            try
+            {
+                if (keyenceScanner == null)
+                {
+                    keyenceScanner = new KeyenceScanner();
+                    keyenceScanner.BarcodeReceived += KeyenceScanner_BarcodeReceived;
+                }
+
+                return keyenceScanner.Connect(ip, dataPort) ? null : keyenceScanner.LastError;
+            }
+            catch (Exception ex)
+            {
+                return ex is FileNotFoundException || ex is FileLoadException || ex is BadImageFormatException
+                    ? $"โหลด Keyence SDK ไม่ได้ (ต้องมี Keyence.AutoID.SDK.dll และไฟล์ประกอบวางคู่กับโปรแกรม)\n{ex.Message}"
+                    : ex.Message;
+            }
+        }
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private void DisconnectKeyence()
+        {
+            try
+            {
+                keyenceScanner?.Disconnect();
+            }
+            catch { }
+            UpdateKeyenceUi(false);
+        }
+
+        private void UpdateKeyenceUi(bool isConnected)
+        {
+            btConnectKeynce.Text = isConnected ? "Disconnect" : "Connect";
+            btConnectKeynce.BackColor = isConnected ? ThemeSuccess : ThemePrimary;
+            txtIPKeynce.Enabled = !isConnected;
+            txtPortKeynce.Enabled = !isConnected;
+        }
+
+        // ถูกเรียกจาก Thread ของ SDK — ต้องส่งกลับไปทำงานบน UI Thread
+        private void KeyenceScanner_BarcodeReceived(string barcode)
+        {
+            if (!this.IsHandleCreated || this.IsDisposed) return;
+
+            this.BeginInvoke(new Action(async () =>
+            {
+                // Keyence ส่งคำว่า "ERROR" เมื่ออ่านบาร์โค้ดไม่ออก
+                if (string.Equals(barcode, "ERROR", StringComparison.OrdinalIgnoreCase))
+                {
+                    UpdateSensorLabel("Scan Error", Color.Red);
+                    return;
+                }
+
+                await ProcessScannedBarcodeAsync(barcode);
+            }));
+        }
+
+        #endregion
+
         #region Config Management (Load/Save)
 
         private void LoadModbusSettings()
@@ -2891,6 +3059,8 @@ namespace Themister_Real
             SaveLastSelectedLineAndStation();
             DisconnectPLC();
             UpdatePlcStatusIndicator(false);
+            SaveKeyenceSettings();
+            DisconnectKeyence();
             CloseUsbHandles();
             Application.Exit();
         }

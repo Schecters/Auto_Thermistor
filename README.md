@@ -11,6 +11,8 @@
 1. เปิด `Themister_Real.slnx` ใน Visual Studio
 2. Restore NuGet packages (NModbus, System.Text.Json ฯลฯ)
 3. ไฟล์ `.pfx` ไม่ได้อยู่ใน repo — ถ้า build ไม่ผ่านเรื่อง signing ให้สร้าง test certificate ใหม่ใน Project Properties > Signing
+4. Keyence SDK ไม่ได้อยู่ใน repo — ก็อป `Keyence.AutoID.SDK.dll` (และไฟล์ประกอบ) มาวางที่ `Themister_Real/lib/` ก่อน build
+5. โปรแกรม build เป็น **x86** เพราะ Keyence SDK เป็น 32-bit
 
 ## Change log
 - [2026-10-15 — Form2: ปรับหน้าตา UI ให้สวยขึ้น](changes/2026-10-15_form2-ui-theme.md)
