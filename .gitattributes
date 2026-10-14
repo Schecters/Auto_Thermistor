@@ -1,0 +1,10 @@
+# เก็บใน repo เป็น LF, เช็คเอาท์บน Windows เป็น CRLF
+* text=auto
+*.cs text eol=crlf
+*.csproj text eol=crlf
+*.resx text eol=crlf
+*.config text eol=crlf
+*.settings text eol=crlf
+*.slnx text eol=crlf
+*.png binary
+*.dll binary
