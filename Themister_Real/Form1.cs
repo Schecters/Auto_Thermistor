@@ -7,6 +7,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -35,7 +36,7 @@ namespace Themister_Real
 
             try
             {
-                string jsonPayload = $"{{\"employeeId\":\"{empId}\",\"password\":\"{password}\",\"deviceId\":\"WinForms_Client\"}}";
+                string jsonPayload = JsonSerializer.Serialize(new { employeeId = empId, password = password, deviceId = "WinForms_Client" });
                 var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
 
                 using (HttpClient client = new HttpClient())
@@ -112,4 +113,4 @@ namespace Themister_Real
             Token = "";
         }
     }
-}
+}

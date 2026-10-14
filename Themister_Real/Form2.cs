@@ -343,12 +343,11 @@ namespace Themister_Real
 
             string testDataFormatted = $"START_{startTimeStr};{sn};{stepsSummary};END_{endTimeStr};{resultStr}";
 
-            return $@"{{
-  ""routingData"": [
-    ""{routingString}""
-  ],
-  ""testData"": ""{testDataFormatted}""
-}}";
+            return JsonSerializer.Serialize(new
+            {
+                routingData = new[] { routingString },
+                testData = testDataFormatted
+            }, new JsonSerializerOptions { WriteIndented = true });
         }
 
         #endregion
@@ -473,13 +472,7 @@ namespace Themister_Real
             UpdateDmmStatusIndicator(false);
             UpdateSensorLabel("0.0000", Color.Gray);
 
-            Control[] foundLb = this.Controls.Find("lbPassFail", true);
-            if (foundLb.Length > 0 && foundLb[0] is Label lbStart)
-            {
-                lbStart.Text = "READY";
-                lbStart.ForeColor = Color.White;
-                lbStart.BackColor = ThemeNeutral;
-            }
+            SetPassFailReady();
         }
 
         #region UI Theme
@@ -493,6 +486,7 @@ namespace Themister_Real
         private static readonly Color ThemeSuccess = Color.FromArgb(22, 163, 74);
         private static readonly Color ThemeDanger = Color.FromArgb(220, 38, 38);
         private static readonly Color ThemeNeutral = Color.FromArgb(107, 114, 128);
+        private static readonly Color ThemeWarning = Color.FromArgb(217, 119, 6);
         private static readonly Color ThemeGridLine = Color.FromArgb(229, 231, 235);
         private const string ThemeFontName = "Segoe UI";
 
@@ -528,8 +522,46 @@ namespace Themister_Real
                 lbPassFail.AutoSize = false;
                 lbPassFail.TextAlign = ContentAlignment.MiddleCenter;
                 lbPassFail.ForeColor = Color.White;
-                lbPassFail.Font = new Font(ThemeFontName, lbPassFail.Font.Size, FontStyle.Bold);
+                lbPassFail.TextChanged += (s, e) => FitPassFailFont();
+                lbPassFail.SizeChanged += (s, e) => FitPassFailFont();
+                FitPassFailFont();
             }
+        }
+
+        // หาขนาดฟอนต์ใหญ่สุดที่ข้อความ (READY / TEST / PASS / FAIL) ยังพอดีกล่อง lbPassFail
+        private void FitPassFailFont()
+        {
+            if (lbPassFail == null || string.IsNullOrEmpty(lbPassFail.Text)) return;
+
+            const int padding = 8;
+            Size available = new Size(lbPassFail.ClientSize.Width - padding * 2, lbPassFail.ClientSize.Height - padding * 2);
+            if (available.Width <= 0 || available.Height <= 0) return;
+
+            float size = 8f;
+            for (float candidate = 140f; candidate > 8f; candidate -= 2f)
+            {
+                using (var test = new Font(ThemeFontName, candidate, FontStyle.Bold))
+                {
+                    Size measured = TextRenderer.MeasureText(lbPassFail.Text, test, Size.Empty, TextFormatFlags.NoPadding);
+                    if (measured.Width <= available.Width && measured.Height <= available.Height)
+                    {
+                        size = candidate;
+                        break;
+                    }
+                }
+            }
+
+            if (Math.Abs(lbPassFail.Font.Size - size) > 0.1f || !lbPassFail.Font.Bold)
+            {
+                lbPassFail.Font = new Font(ThemeFontName, size, FontStyle.Bold);
+            }
+        }
+
+        private void SetPassFailReady()
+        {
+            lbPassFail.Text = "READY";
+            lbPassFail.ForeColor = Color.White;
+            lbPassFail.BackColor = ThemeNeutral;
         }
 
         private void ApplyThemeToChildren(Control parent)
@@ -1163,10 +1195,11 @@ namespace Themister_Real
             {
                 lbInit.Text = "TEST";
                 lbInit.ForeColor = Color.White;
-                lbInit.BackColor = Color.Orange;
+                lbInit.BackColor = ThemeWarning;
             }
 
             bool overallPass = true;
+            bool hasResult = false;
 
             try
             {
@@ -1241,6 +1274,7 @@ namespace Themister_Real
                     catch { }
 
                     UpdatePassFailLabel(overallPass);
+                    hasResult = true;
 
                     string mesMode = cbMES.SelectedItem?.ToString() ?? "MES";
                     bool isMesMode = string.Equals(mesMode, "MES", StringComparison.OrdinalIgnoreCase);
@@ -1295,7 +1329,8 @@ namespace Themister_Real
                     }
                 }
             }
-            catch (TaskCanceledException)
+            // OperationCanceledException ครอบทั้ง Task.Delay และ SemaphoreSlim.WaitAsync ที่ถูกยกเลิก
+            catch (OperationCanceledException)
             {
                 MessageBox.Show("สั่งหยุดการทำงานของ Sequence เรียบร้อยแล้ว", "Stop", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
@@ -1305,6 +1340,9 @@ namespace Themister_Real
             }
             finally
             {
+                // ไม่ได้ผล PASS/FAIL (Recipe ว่าง / กด Stop / Error) → ไม่ให้ป้ายค้างที่ "TEST"
+                if (!hasResult) SetPassFailReady();
+
                 isSequenceRunning = false;
                 btPLCStart.Enabled = true;
                 if (ctsSequence != null)
@@ -2215,17 +2253,8 @@ namespace Themister_Real
         {
             if (!this.IsHandleCreated || this.IsDisposed) return;
 
-            this.BeginInvoke(new Action(async () =>
-            {
-                // Keyence ส่งคำว่า "ERROR" เมื่ออ่านบาร์โค้ดไม่ออก
-                if (string.Equals(barcode, "ERROR", StringComparison.OrdinalIgnoreCase))
-                {
-                    UpdateSensorLabel("Scan Error", Color.Red);
-                    return;
-                }
-
-                await ProcessScannedBarcodeAsync(barcode);
-            }));
+            // "ERROR" (อ่านไม่ออก) ส่งเข้า Flow เดียวกับ Scanner USB — btPLCStart_Click จะตั้ง FAIL และสั่ง M3030 ปล่อยชิ้นงาน
+            this.BeginInvoke(new Action(async () => await ProcessScannedBarcodeAsync(barcode)));
         }
 
         #endregion
@@ -2836,7 +2865,8 @@ namespace Themister_Real
 
                     c.SetBounds(newX, newY, newW, newH);
 
-                    if (fontScale > 0)
+                    // lbPassFail คำนวณฟอนต์เองใน FitPassFailFont() ตอน SizeChanged
+                    if (fontScale > 0 && c != lbPassFail)
                     {
                         float newFontSize = Math.Max(8f, orig.FontSize * fontScale);
                         c.Font = new Font(c.Font.FontFamily, newFontSize, c.Font.Style);
@@ -3061,4 +3091,4 @@ namespace Themister_Real
 
         #endregion
     }
-}
+}
