@@ -1,0 +1,19 @@
+# Visual Studio / build output
+.vs/
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+
+# NuGet packages (restore ด้วย packages.config)
+packages/
+
+# กุญแจเซ็นโปรแกรม — ห้ามขึ้น public repo
+*.pfx
+*.snk
+
+# ไฟล์ config ของเครื่องหน้างาน
+*.cfg
+
+# backup
+*.bak
