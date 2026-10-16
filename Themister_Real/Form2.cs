@@ -51,9 +51,14 @@ namespace Themister_Real
         private readonly SemaphoreSlim dmmLock = new SemaphoreSlim(1, 1);
         private CancellationTokenSource ctsDmmMonitor = null;
         private bool isDmmMonitoring = false;
-        private bool isShowingDmmAlert = false;
+        // กันการเปิด/ปิด Handle ชนกันระหว่าง Monitor Thread กับปุ่ม Connect
+        private readonly object dmmConnectSync = new object();
+        // Device Path ของอุปกรณ์ที่เลือกใน cbThermistorUsb (อ่านจาก Thread เบื้องหลัง)
+        private volatile string selectedDmmDevicePath = null;
+        // false เมื่อผู้ใช้กด Disconnect — หยุดต่อใหม่อัตโนมัติจนกว่าจะกด Connect
+        private volatile bool isDmmConnectWanted = true;
 
-        // Hardware IDs สำหรับ PICOTEST M3521A / M3522A
+        // Hardware IDs สำหรับ PICOTEST M3521A / M3522A (ใช้เลือกอุปกรณ์ Default)
         private const ushort TARGET_VID = 0x5710;
         private const ushort TARGET_PID = 0x3520;
 
@@ -61,6 +66,7 @@ namespace Themister_Real
         private readonly string mnConfigFilePath = Path.Combine(Application.StartupPath, "mn_address_config.cfg");
         private readonly string lineStationConfigFilePath = Path.Combine(Application.StartupPath, "line_station_config.cfg");
         private readonly string keyenceConfigFilePath = Path.Combine(Application.StartupPath, "keyence_config.cfg");
+        private readonly string thermistorConfigFilePath = Path.Combine(Application.StartupPath, "thermistor_config.cfg");
 
         // ---------------- Keyence Barcode Scanner (SR-X100W / TCP Data Port) ----------------
         private KeyenceScanner keyenceScanner = null;
@@ -413,6 +419,8 @@ namespace Themister_Real
             if (btPLCStop != null) btPLCStop.Click += btPLCStop_Click;
             if (btStepRefresh != null) btStepRefresh.Click += btStepRefresh_Click;
             if (btConnectKeynce != null) btConnectKeynce.Click += btConnectKeynce_Click;
+            if (btRefreshThermistorUsb != null) btRefreshThermistorUsb.Click += btRefreshThermistorUsb_Click;
+            if (btConnectThermistor != null) btConnectThermistor.Click += btConnectThermistor_Click;
 
             Control[] foundApiTxt = this.Controls.Find("txtAPI", true);
             if (foundApiTxt.Length > 0 && foundApiTxt[0] is TextBox txtApi)
@@ -601,7 +609,7 @@ namespace Themister_Real
         {
             if (name.StartsWith("btONMN") || name == "btPLCStart") return ThemeSuccess;
             if (name.StartsWith("btOFFMN") || name == "btPLCStop") return ThemeDanger;
-            if (name == "btStepRefresh") return ThemeNeutral;
+            if (name == "btStepRefresh" || name == "btRefreshThermistorUsb") return ThemeNeutral;
             return ThemePrimary;
         }
 
@@ -686,6 +694,7 @@ namespace Themister_Real
             LoadKeyenceSettings();
             _ = ConnectKeyenceAsync(isSilent: true);
 
+            LoadThermistorSettings();
             StartDmmRealtimeMonitor();
 
             await LoadAllLinesAndStationsAsync();
@@ -1638,36 +1647,46 @@ namespace Themister_Real
             }
         }
 
+        // ตรวจสถานะทุก 2 วินาที: อุปกรณ์หาย = ปิด Handle (ไฟแดง), เสียบกลับมา = ต่อใหม่แบบเงียบ (ไม่มี Popup)
         private async Task DmmConnectionMonitorLoopAsync(CancellationToken token)
         {
-            EnsureDmmConnected();
-
             while (!token.IsCancellationRequested)
             {
                 try
                 {
-                    await Task.Delay(2000, token);
-
-                    if (isSequenceRunning) continue;
-
-                    string path = FindDevicePath(TARGET_VID, TARGET_PID);
-                    bool isDevicePlugged = !string.IsNullOrEmpty(path);
-
-                    if (!isDevicePlugged)
+                    if (!isSequenceRunning)
                     {
-                        if (winUsbHandle != IntPtr.Zero)
+                        List<UsbDeviceItem> devices = EnumerateUsbDevices();
+
+                        string path = selectedDmmDevicePath;
+                        if (string.IsNullOrEmpty(path))
                         {
-                            CloseUsbHandles();
+                            // ยังไม่เคยเลือกอุปกรณ์ — ใช้ Picotest ตัวแรกที่เจอเป็นค่า Default
+                            UsbDeviceItem dmm = devices.Find(d => d.Vid == TARGET_VID && d.Pid == TARGET_PID);
+                            if (dmm != null)
+                            {
+                                path = dmm.DevicePath;
+                                selectedDmmDevicePath = path;
+                            }
                         }
-                        ShowDmmDisconnectAlert();
-                    }
-                    else
-                    {
-                        if (winUsbHandle == IntPtr.Zero && !isShowingDmmAlert)
+
+                        bool isDevicePlugged = !string.IsNullOrEmpty(path) &&
+                            devices.Exists(d => string.Equals(d.DevicePath, path, StringComparison.OrdinalIgnoreCase));
+
+                        if (!isDevicePlugged)
+                        {
+                            if (winUsbHandle != IntPtr.Zero)
+                            {
+                                CloseUsbHandles();
+                            }
+                        }
+                        else if (winUsbHandle == IntPtr.Zero && isDmmConnectWanted)
                         {
                             EnsureDmmConnected();
                         }
                     }
+
+                    await Task.Delay(2000, token);
                 }
                 catch (TaskCanceledException)
                 {
@@ -1675,54 +1694,9 @@ namespace Themister_Real
                 }
                 catch
                 {
-                    await Task.Delay(2000, token);
+                    try { await Task.Delay(2000, token); }
+                    catch (TaskCanceledException) { break; }
                 }
-            }
-        }
-
-        private void ShowDmmDisconnectAlert()
-        {
-            if (isShowingDmmAlert) return;
-            isShowingDmmAlert = true;
-
-            if (this.IsHandleCreated && !this.IsDisposed)
-            {
-                this.BeginInvoke(new Action(() =>
-                {
-                    bool reconnected = false;
-
-                    while (!reconnected && !this.IsDisposed)
-                    {
-                        DialogResult result = MessageBox.Show(
-                            "ตรวจพบว่าการเชื่อมต่อกับ USB DMM (Picotest) หลุดออกจากระบบ!\n\nกรุณาเสียบสาย USB ให้แน่น แล้วกด [Retry] เพื่อเชื่อมต่อใหม่\n(หรือกด [Cancel] เพื่อปิดการแจ้งเตือนชั่วคราว)",
-                            "USB DMM Disconnected",
-                            MessageBoxButtons.RetryCancel,
-                            MessageBoxIcon.Warning);
-
-                        if (result == DialogResult.Retry)
-                        {
-                            if (EnsureDmmConnected())
-                            {
-                                reconnected = true;
-                                MessageBox.Show("เชื่อมต่อกับ USB DMM สำเร็จเรียบร้อย!", "Connected", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                            }
-                            else
-                            {
-                                MessageBox.Show("ยังไม่พบอุปกรณ์ USB DMM กรุณาตรวจสอบสายและพอร์ต USB อีกครั้ง", "Connection Failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                            }
-                        }
-                        else
-                        {
-                            break;
-                        }
-                    }
-
-                    isShowingDmmAlert = false;
-                }));
-            }
-            else
-            {
-                isShowingDmmAlert = false;
             }
         }
 
@@ -1737,11 +1711,28 @@ namespace Themister_Real
                     {
                         pn.BackColor = isConnected ? Color.LimeGreen : Color.Crimson;
                     }
+
+                    // Monitor ต่อให้เอง (เช่นเสียบกลับมา / Default Picotest) — ให้ Dropdown แสดงอุปกรณ์ที่ใช้อยู่
+                    if (isConnected && !(cbThermistorUsb.SelectedItem is UsbDeviceItem item &&
+                        string.Equals(item.DevicePath, selectedDmmDevicePath, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        RefreshThermistorUsbList(selectedDmmDevicePath);
+                    }
+
+                    UpdateThermistorUi(isConnected);
                 }));
             }
         }
 
         private bool EnsureDmmConnected()
+        {
+            lock (dmmConnectSync)
+            {
+                return EnsureDmmConnectedCore();
+            }
+        }
+
+        private bool EnsureDmmConnectedCore()
         {
             if (winUsbHandle != IntPtr.Zero)
             {
@@ -1751,8 +1742,8 @@ namespace Themister_Real
 
             try
             {
-                string devicePath = FindDevicePath(TARGET_VID, TARGET_PID);
-                if (string.IsNullOrEmpty(devicePath))
+                string devicePath = selectedDmmDevicePath;
+                if (!isDmmConnectWanted || string.IsNullOrEmpty(devicePath))
                 {
                     UpdateDmmStatusIndicator(false);
                     return false;
@@ -1922,17 +1913,20 @@ namespace Themister_Real
 
         private void CloseUsbHandles()
         {
-            if (winUsbHandle != IntPtr.Zero)
+            lock (dmmConnectSync)
             {
-                WinUsb_Free(winUsbHandle);
-                winUsbHandle = IntPtr.Zero;
-            }
+                if (winUsbHandle != IntPtr.Zero)
+                {
+                    WinUsb_Free(winUsbHandle);
+                    winUsbHandle = IntPtr.Zero;
+                }
 
-            if (usbDeviceHandle != null && !usbDeviceHandle.IsInvalid)
-            {
-                usbDeviceHandle.Close();
-                usbDeviceHandle.Dispose();
-                usbDeviceHandle = null;
+                if (usbDeviceHandle != null && !usbDeviceHandle.IsInvalid)
+                {
+                    usbDeviceHandle.Close();
+                    usbDeviceHandle.Dispose();
+                    usbDeviceHandle = null;
+                }
             }
 
             UpdateDmmStatusIndicator(false);
@@ -1964,9 +1958,25 @@ namespace Themister_Real
             return true;
         }
 
-        private string FindDevicePath(ushort vid, ushort pid)
+        // อุปกรณ์ USB 1 ตัวใน Dropdown cbThermistorUsb
+        private class UsbDeviceItem
         {
-            string target = $"vid_{vid:x4}&pid_{pid:x4}";
+            public string DevicePath { get; set; }
+            public string Description { get; set; }
+            public ushort Vid { get; set; }
+            public ushort Pid { get; set; }
+
+            public override string ToString() => $"{Description} (VID_{Vid:X4} PID_{Pid:X4})";
+        }
+
+        private static readonly Regex UsbVidPidRegex = new Regex(@"vid_([0-9a-f]{4})&pid_([0-9a-f]{4})", RegexOptions.IgnoreCase);
+
+        // รายชื่ออุปกรณ์ USB ที่เสียบอยู่ทั้งหมด (ตาม Interface GUID ใน TARGET_DEVICE_GUIDS)
+        // อุปกรณ์เดียวกันที่โผล่หลาย GUID จะเก็บ Path แรกที่เจอ (ลำดับ GUID เดียวกับที่ใช้เปิดเชื่อมต่อเดิม)
+        private List<UsbDeviceItem> EnumerateUsbDevices()
+        {
+            var devices = new List<UsbDeviceItem>();
+            var seenInstances = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             foreach (Guid guid in TARGET_DEVICE_GUIDS)
             {
@@ -1990,15 +2000,34 @@ namespace Themister_Real
                             int cbSizeValue = (IntPtr.Size == 8) ? 8 : (4 + Marshal.SystemDefaultCharSize);
                             Marshal.WriteInt32(detailBuffer, 0, cbSizeValue);
 
-                            if (SetupDiGetDeviceInterfaceDetail(hDevInfo, ref ifData, detailBuffer, requiredSize, out _, IntPtr.Zero))
+                            SP_DEVINFO_DATA devInfo = new SP_DEVINFO_DATA();
+                            devInfo.cbSize = (uint)Marshal.SizeOf(typeof(SP_DEVINFO_DATA));
+
+                            if (SetupDiGetDeviceInterfaceDetail(hDevInfo, ref ifData, detailBuffer, requiredSize, out _, ref devInfo))
                             {
                                 IntPtr pDevicePath = new IntPtr(detailBuffer.ToInt64() + 4);
                                 string path = Marshal.PtrToStringAuto(pDevicePath);
+                                if (string.IsNullOrEmpty(path)) continue;
 
-                                if (!string.IsNullOrEmpty(path) && path.IndexOf(target, StringComparison.OrdinalIgnoreCase) >= 0)
+                                Match m = UsbVidPidRegex.Match(path);
+                                if (!m.Success) continue;
+
+                                // \\?\usb#vid_xxxx&pid_xxxx#serial#{guid} -> ตัด #{guid} ออกเพื่อใช้ระบุตัวอุปกรณ์
+                                int guidStart = path.LastIndexOf("#{", StringComparison.Ordinal);
+                                string instanceKey = guidStart > 0 ? path.Substring(0, guidStart) : path;
+                                if (!seenInstances.Add(instanceKey)) continue;
+
+                                string description = GetDeviceRegistryString(hDevInfo, ref devInfo, SPDRP_FRIENDLYNAME);
+                                if (string.IsNullOrEmpty(description)) description = GetDeviceRegistryString(hDevInfo, ref devInfo, SPDRP_DEVICEDESC);
+                                if (string.IsNullOrEmpty(description)) description = "USB Device";
+
+                                devices.Add(new UsbDeviceItem
                                 {
-                                    return path;
-                                }
+                                    DevicePath = path,
+                                    Description = description,
+                                    Vid = ushort.Parse(m.Groups[1].Value, NumberStyles.HexNumber),
+                                    Pid = ushort.Parse(m.Groups[2].Value, NumberStyles.HexNumber)
+                                });
                             }
                         }
                         finally
@@ -2013,8 +2042,120 @@ namespace Themister_Real
                 }
             }
 
-            return null;
+            return devices;
         }
+
+        private static string GetDeviceRegistryString(IntPtr hDevInfo, ref SP_DEVINFO_DATA devInfo, uint property)
+        {
+            byte[] buffer = new byte[1024];
+            if (!SetupDiGetDeviceRegistryProperty(hDevInfo, ref devInfo, property, out _, buffer, (uint)buffer.Length, out uint requiredSize))
+                return null;
+
+            int length = (int)Math.Min(requiredSize, (uint)buffer.Length);
+            return Encoding.Unicode.GetString(buffer, 0, length).TrimEnd('\0').Trim();
+        }
+
+        #region Thermistor USB Device Selection (cbThermistorUsb)
+
+        // เติมรายชื่ออุปกรณ์ USB ลง Dropdown แล้วเลือกตัวที่ตรงกับ preferredPath (ถ้าไม่มีจะเลือก Picotest ตัวแรก)
+        private void RefreshThermistorUsbList(string preferredPath)
+        {
+            List<UsbDeviceItem> devices = EnumerateUsbDevices();
+
+            cbThermistorUsb.BeginUpdate();
+            cbThermistorUsb.Items.Clear();
+            foreach (UsbDeviceItem d in devices) cbThermistorUsb.Items.Add(d);
+            cbThermistorUsb.EndUpdate();
+
+            int selectIndex = -1;
+            if (!string.IsNullOrEmpty(preferredPath))
+            {
+                selectIndex = devices.FindIndex(d => string.Equals(d.DevicePath, preferredPath, StringComparison.OrdinalIgnoreCase));
+            }
+            if (selectIndex < 0)
+            {
+                selectIndex = devices.FindIndex(d => d.Vid == TARGET_VID && d.Pid == TARGET_PID);
+            }
+            if (selectIndex < 0 && devices.Count > 0) selectIndex = 0;
+
+            cbThermistorUsb.SelectedIndex = selectIndex;
+        }
+
+        private void LoadThermistorSettings()
+        {
+            try
+            {
+                if (File.Exists(thermistorConfigFilePath))
+                {
+                    string savedPath = File.ReadAllText(thermistorConfigFilePath).Trim();
+                    if (!string.IsNullOrEmpty(savedPath)) selectedDmmDevicePath = savedPath;
+                }
+            }
+            catch { }
+
+            RefreshThermistorUsbList(selectedDmmDevicePath);
+        }
+
+        private void SaveThermistorSettings()
+        {
+            string path = selectedDmmDevicePath;
+            if (string.IsNullOrEmpty(path)) return;
+
+            try
+            {
+                File.WriteAllText(thermistorConfigFilePath, path);
+            }
+            catch { }
+        }
+
+        private void btRefreshThermistorUsb_Click(object sender, EventArgs e)
+        {
+            RefreshThermistorUsbList(selectedDmmDevicePath);
+        }
+
+        private void btConnectThermistor_Click(object sender, EventArgs e)
+        {
+            if (winUsbHandle != IntPtr.Zero)
+            {
+                if (isSequenceRunning)
+                {
+                    MessageBox.Show("กรุณากด Stop ก่อนตัดการเชื่อมต่อ Thermistor", "Thermistor", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                isDmmConnectWanted = false;
+                CloseUsbHandles();
+                return;
+            }
+
+            if (!(cbThermistorUsb.SelectedItem is UsbDeviceItem item))
+            {
+                MessageBox.Show("ไม่พบอุปกรณ์ USB ที่เลือก กรุณากด Refresh แล้วเลือกอุปกรณ์ของ Thermistor", "Thermistor", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            selectedDmmDevicePath = item.DevicePath;
+            isDmmConnectWanted = true;
+
+            if (EnsureDmmConnected())
+            {
+                SaveThermistorSettings();
+            }
+            else
+            {
+                MessageBox.Show($"เชื่อมต่อ {item} ไม่สำเร็จ\nอุปกรณ์อาจไม่ใช่ DMM (WinUSB) หรือถูกโปรแกรมอื่นใช้งานอยู่", "Thermistor", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void UpdateThermistorUi(bool isConnected)
+        {
+            btConnectThermistor.Text = isConnected ? "Disconnect" : "Connect";
+            btConnectThermistor.BackColor = isConnected ? ThemeSuccess : ThemePrimary;
+            cbThermistorUsb.Enabled = !isConnected;
+            btRefreshThermistorUsb.Enabled = !isConnected;
+        }
+
+        #endregion
 
         #region Native Win32 / WinUSB Declarations
 
@@ -2062,8 +2203,26 @@ namespace Themister_Real
         [DllImport("setupapi.dll", SetLastError = true, CharSet = CharSet.Auto)]
         private static extern bool SetupDiGetDeviceInterfaceDetail(IntPtr DeviceInfoSet, ref SP_DEVICE_INTERFACE_DATA DeviceInterfaceData, IntPtr DeviceInterfaceDetailData, uint DeviceInterfaceDetailDataSize, out uint RequiredSize, IntPtr DeviceInfoData);
 
+        [DllImport("setupapi.dll", SetLastError = true, CharSet = CharSet.Auto)]
+        private static extern bool SetupDiGetDeviceInterfaceDetail(IntPtr DeviceInfoSet, ref SP_DEVICE_INTERFACE_DATA DeviceInterfaceData, IntPtr DeviceInterfaceDetailData, uint DeviceInterfaceDetailDataSize, out uint RequiredSize, ref SP_DEVINFO_DATA DeviceInfoData);
+
+        [DllImport("setupapi.dll", SetLastError = true, CharSet = CharSet.Unicode, EntryPoint = "SetupDiGetDeviceRegistryPropertyW")]
+        private static extern bool SetupDiGetDeviceRegistryProperty(IntPtr DeviceInfoSet, ref SP_DEVINFO_DATA DeviceInfoData, uint Property, out uint PropertyRegDataType, byte[] PropertyBuffer, uint PropertyBufferSize, out uint RequiredSize);
+
         [DllImport("setupapi.dll", SetLastError = true)]
         private static extern bool SetupDiDestroyDeviceInfoList(IntPtr DeviceInfoSet);
+
+        private const uint SPDRP_DEVICEDESC = 0x00;
+        private const uint SPDRP_FRIENDLYNAME = 0x0C;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct SP_DEVINFO_DATA
+        {
+            public uint cbSize;
+            public Guid classGuid;
+            public uint devInst;
+            public IntPtr reserved;
+        }
 
         [StructLayout(LayoutKind.Sequential)]
         private struct SP_DEVICE_INTERFACE_DATA
@@ -3085,6 +3244,7 @@ namespace Themister_Real
             UpdatePlcStatusIndicator(false);
             SaveKeyenceSettings();
             DisconnectKeyence();
+            SaveThermistorSettings();
             CloseUsbHandles();
             Application.Exit();
         }

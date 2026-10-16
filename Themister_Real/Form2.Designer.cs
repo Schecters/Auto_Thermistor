@@ -102,6 +102,10 @@
             this.txtMN1 = new System.Windows.Forms.TextBox();
             this.tabPage3 = new System.Windows.Forms.TabPage();
             this.tabPage5 = new System.Windows.Forms.TabPage();
+            this.btConnectThermistor = new System.Windows.Forms.Button();
+            this.btRefreshThermistorUsb = new System.Windows.Forms.Button();
+            this.cbThermistorUsb = new System.Windows.Forms.ComboBox();
+            this.label21 = new System.Windows.Forms.Label();
             this.btConnectKeynce = new System.Windows.Forms.Button();
             this.label20 = new System.Windows.Forms.Label();
             this.label19 = new System.Windows.Forms.Label();
@@ -925,6 +929,10 @@
             // 
             // tabPage5
             // 
+            this.tabPage5.Controls.Add(this.btConnectThermistor);
+            this.tabPage5.Controls.Add(this.btRefreshThermistorUsb);
+            this.tabPage5.Controls.Add(this.cbThermistorUsb);
+            this.tabPage5.Controls.Add(this.label21);
             this.tabPage5.Controls.Add(this.btConnectKeynce);
             this.tabPage5.Controls.Add(this.label20);
             this.tabPage5.Controls.Add(this.label19);
@@ -946,7 +954,46 @@
             this.tabPage5.TabIndex = 3;
             this.tabPage5.Text = "Connection";
             this.tabPage5.UseVisualStyleBackColor = true;
-            // 
+            //
+            // btConnectThermistor
+            //
+            this.btConnectThermistor.Location = new System.Drawing.Point(567, 232);
+            this.btConnectThermistor.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
+            this.btConnectThermistor.Name = "btConnectThermistor";
+            this.btConnectThermistor.Size = new System.Drawing.Size(91, 30);
+            this.btConnectThermistor.TabIndex = 22;
+            this.btConnectThermistor.Text = "Connect";
+            this.btConnectThermistor.UseVisualStyleBackColor = true;
+            //
+            // btRefreshThermistorUsb
+            //
+            this.btRefreshThermistorUsb.Location = new System.Drawing.Point(470, 232);
+            this.btRefreshThermistorUsb.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
+            this.btRefreshThermistorUsb.Name = "btRefreshThermistorUsb";
+            this.btRefreshThermistorUsb.Size = new System.Drawing.Size(91, 30);
+            this.btRefreshThermistorUsb.TabIndex = 21;
+            this.btRefreshThermistorUsb.Text = "Refresh";
+            this.btRefreshThermistorUsb.UseVisualStyleBackColor = true;
+            //
+            // cbThermistorUsb
+            //
+            this.cbThermistorUsb.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.cbThermistorUsb.FormattingEnabled = true;
+            this.cbThermistorUsb.Location = new System.Drawing.Point(21, 235);
+            this.cbThermistorUsb.Name = "cbThermistorUsb";
+            this.cbThermistorUsb.Size = new System.Drawing.Size(440, 24);
+            this.cbThermistorUsb.TabIndex = 20;
+            //
+            // label21
+            //
+            this.label21.AutoSize = true;
+            this.label21.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F);
+            this.label21.Location = new System.Drawing.Point(17, 202);
+            this.label21.Name = "label21";
+            this.label21.Size = new System.Drawing.Size(136, 20);
+            this.label21.TabIndex = 19;
+            this.label21.Text = "Thermistor (USB)";
+            //
             // btConnectKeynce
             // 
             this.btConnectKeynce.Location = new System.Drawing.Point(373, 144);
@@ -1389,5 +1436,9 @@
         private System.Windows.Forms.Label label19;
         private System.Windows.Forms.TextBox txtPortKeynce;
         private System.Windows.Forms.TextBox txtIPKeynce;
+        private System.Windows.Forms.Label label21;
+        private System.Windows.Forms.ComboBox cbThermistorUsb;
+        private System.Windows.Forms.Button btRefreshThermistorUsb;
+        private System.Windows.Forms.Button btConnectThermistor;
     }
 }
