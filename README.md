@@ -17,3 +17,4 @@
 - [2026-10-15 — Form2: อ่านบาร์โค้ดจาก Keyence Scanner ผ่าน LAN](changes/2026-10-15_keyence-scanner.md)
 - [2026-10-15 — Keyence SR-X100W: เชื่อมต่อ TCP ตรง (เลิกใช้ SDK)](changes/2026-10-15_keyence-tcp-direct.md)
 - [2026-10-15 — ป้าย PASS/FAIL ตัดคำ + แก้จุดเสี่ยงจากการตรวจโค้ด](changes/2026-10-15_passfail-label-and-fixes.md)
+- [2026-10-16 — Thermistor: เลือกอุปกรณ์ USB จาก Dropdown + เลิก Popup แจ้งหลุด](changes/2026-10-16_thermistor-usb-dropdown.md)
