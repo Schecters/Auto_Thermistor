@@ -102,6 +102,8 @@
             this.txtMN1 = new System.Windows.Forms.TextBox();
             this.tabPage3 = new System.Windows.Forms.TabPage();
             this.tabPage5 = new System.Windows.Forms.TabPage();
+            this.lbThermistorInfo = new System.Windows.Forms.Label();
+            this.btTestThermistor = new System.Windows.Forms.Button();
             this.btConnectThermistor = new System.Windows.Forms.Button();
             this.btRefreshThermistorUsb = new System.Windows.Forms.Button();
             this.cbThermistorUsb = new System.Windows.Forms.ComboBox();
@@ -929,6 +931,8 @@
             // 
             // tabPage5
             // 
+            this.tabPage5.Controls.Add(this.lbThermistorInfo);
+            this.tabPage5.Controls.Add(this.btTestThermistor);
             this.tabPage5.Controls.Add(this.btConnectThermistor);
             this.tabPage5.Controls.Add(this.btRefreshThermistorUsb);
             this.tabPage5.Controls.Add(this.cbThermistorUsb);
@@ -964,6 +968,25 @@
             this.btConnectThermistor.TabIndex = 22;
             this.btConnectThermistor.Text = "Connect";
             this.btConnectThermistor.UseVisualStyleBackColor = true;
+            //
+            // btTestThermistor
+            //
+            this.btTestThermistor.Enabled = false;
+            this.btTestThermistor.Location = new System.Drawing.Point(664, 232);
+            this.btTestThermistor.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
+            this.btTestThermistor.Name = "btTestThermistor";
+            this.btTestThermistor.Size = new System.Drawing.Size(91, 30);
+            this.btTestThermistor.TabIndex = 23;
+            this.btTestThermistor.Text = "Test";
+            this.btTestThermistor.UseVisualStyleBackColor = true;
+            //
+            // lbThermistorInfo
+            //
+            this.lbThermistorInfo.AutoSize = true;
+            this.lbThermistorInfo.Location = new System.Drawing.Point(21, 270);
+            this.lbThermistorInfo.Name = "lbThermistorInfo";
+            this.lbThermistorInfo.Size = new System.Drawing.Size(0, 16);
+            this.lbThermistorInfo.TabIndex = 24;
             //
             // btRefreshThermistorUsb
             //
@@ -1440,5 +1463,7 @@
         private System.Windows.Forms.ComboBox cbThermistorUsb;
         private System.Windows.Forms.Button btRefreshThermistorUsb;
         private System.Windows.Forms.Button btConnectThermistor;
+        private System.Windows.Forms.Button btTestThermistor;
+        private System.Windows.Forms.Label lbThermistorInfo;
     }
 }

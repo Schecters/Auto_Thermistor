@@ -42,11 +42,16 @@ namespace Themister_Real
         private readonly string[] cachedMnAddresses = new string[12];
         private bool _prevM3031State = false;
 
-        // ---------------- USB SCPI DMM (M3521A / M3522A) ----------------
+        // ---------------- USB SCPI DMM (Picotest M3521A / M3522A, Chroma 12061) ----------------
         private SafeFileHandle usbDeviceHandle = null;
         private IntPtr winUsbHandle = IntPtr.Zero;
         private byte inPipeId = 0x81;
         private byte outPipeId = 0x02;
+        private ushort usbInterfaceNumber = 0;
+        private bool isUsb488Interface = false;
+        // คำตอบ *IDN? ของเครื่องที่ต่ออยู่ / Chroma ไม่ใช้ SYST:REM
+        private volatile string dmmIdn = string.Empty;
+        private volatile bool dmmUsesSystRemote = true;
         private byte usbTmcBTag = 1;
         private readonly SemaphoreSlim dmmLock = new SemaphoreSlim(1, 1);
         private CancellationTokenSource ctsDmmMonitor = null;
@@ -421,6 +426,7 @@ namespace Themister_Real
             if (btConnectKeynce != null) btConnectKeynce.Click += btConnectKeynce_Click;
             if (btRefreshThermistorUsb != null) btRefreshThermistorUsb.Click += btRefreshThermistorUsb_Click;
             if (btConnectThermistor != null) btConnectThermistor.Click += btConnectThermistor_Click;
+            if (btTestThermistor != null) btTestThermistor.Click += btTestThermistor_Click;
 
             Control[] foundApiTxt = this.Controls.Find("txtAPI", true);
             if (foundApiTxt.Length > 0 && foundApiTxt[0] is TextBox txtApi)
@@ -1422,7 +1428,7 @@ namespace Themister_Real
                     // ล้าง Endpoint และบังคับให้อยู่ใน Remote Mode ผ่าน USB
                     WinUsb_AbortPipe(winUsbHandle, inPipeId);
                     WinUsb_AbortPipe(winUsbHandle, outPipeId);
-                    SendUsbTmcCommand("SYST:REM\n");
+                    SendRemoteModeCommand();
                     SendUsbTmcCommand("*CLS\n");
 
                     string scpiMode = GetScpiCommandByMode(cfg.Mode);
@@ -1445,7 +1451,7 @@ namespace Themister_Real
                         CloseUsbHandles();
                         if (EnsureDmmConnected())
                         {
-                            SendUsbTmcCommand("SYST:REM\n");
+                            SendRemoteModeCommand();
                             SendUsbTmcCommand($"{scpiMode}\n");
                             Thread.Sleep(60);
                             SendUsbTmcCommand("READ?\n");
@@ -1757,9 +1763,13 @@ namespace Themister_Real
 
                 DetectPipes();
 
-                // กำหนด Pipe Timeout 1.5 วินาที
-                SetPipeTimeout(inPipeId, 1500);
+                // Pipe Timeout: ขาออก 1.5 วินาที / ขาเข้า 3 วินาที (DMM 6½ หลัก NPLC 10 + Auto Range วัดนานกว่า 1.5 วินาทีได้)
+                SetPipeTimeout(inPipeId, 3000);
                 SetPipeTimeout(outPipeId, 1500);
+
+                // ส่ง Zero-Length Packet ปิดท้ายเมื่อข้อมูลพอดี Max Packet Size (SHORT_PACKET_TERMINATE = 0x01)
+                byte shortPacketTerminate = 1;
+                WinUsb_SetPipePolicy(winUsbHandle, outPipeId, 0x01, 1, ref shortPacketTerminate);
 
                 // สั่งล้าง Stall อัตโนมัติ (AUTO_CLEAR_STALL = 0x02)
                 uint autoClear = 1;
@@ -1770,8 +1780,14 @@ namespace Themister_Real
                 byte disableSuspend = 0;
                 WinUsb_SetPowerPolicy(winUsbHandle, AUTO_SUSPEND, 1, ref disableSuspend);
 
+                // ถามรุ่นเครื่องก่อน เพื่อเลือกชุดคำสั่ง (Picotest / Chroma)
+                SendUsbTmcCommand("*IDN?\n");
+                dmmIdn = ReadUsbTmcResponse();
+                dmmUsesSystRemote = dmmIdn.IndexOf("CHROMA", StringComparison.OrdinalIgnoreCase) < 0;
+                if (!dmmUsesSystRemote) SendUsb488RemoteEnable();
+
                 // ส่งคำสั่งล็อกให้อยู่ในโหมด USB Remote ตลอดไป
-                SendUsbTmcCommand("SYST:REM\n");
+                SendRemoteModeCommand();
                 SendUsbTmcCommand("*CLS\n");
 
                 UpdateDmmStatusIndicator(true);
@@ -1850,7 +1866,7 @@ namespace Themister_Real
             if (!WinUsb_WritePipe(winUsbHandle, outPipeId, reqPacket, 12, ref bytesWritten, IntPtr.Zero))
                 return string.Empty;
 
-            byte[] readBuffer = new byte[1024];
+            byte[] readBuffer = new byte[2048];
             uint bytesRead = 0;
             if (WinUsb_ReadPipe(winUsbHandle, inPipeId, readBuffer, (uint)readBuffer.Length, ref bytesRead, IntPtr.Zero))
             {
@@ -1876,21 +1892,35 @@ namespace Themister_Real
         {
             inPipeId = 0x81;
             outPipeId = 0x02;
+            usbInterfaceNumber = 0;
+            isUsb488Interface = false;
 
             try
             {
                 USB_INTERFACE_DESCRIPTOR ifDesc = new USB_INTERFACE_DESCRIPTOR();
                 if (WinUsb_QueryInterfaceSettings(winUsbHandle, 0, ref ifDesc))
                 {
+                    usbInterfaceNumber = ifDesc.bInterfaceNumber;
+                    // USBTMC = Class 0xFE / SubClass 0x03, Protocol 0x01 = USB488 (เช่น Chroma 12061)
+                    isUsb488Interface = ifDesc.bInterfaceClass == 0xFE && ifDesc.bInterfaceSubClass == 0x03 && ifDesc.bInterfaceProtocol == 0x01;
+
+                    bool foundIn = false, foundOut = false;
                     for (byte i = 0; i < ifDesc.bNumEndpoints; i++)
                     {
                         WINUSB_PIPE_INFORMATION pipeInfo = new WINUSB_PIPE_INFORMATION();
                         if (WinUsb_QueryPipe(winUsbHandle, 0, i, ref pipeInfo))
                         {
+                            // ใช้เฉพาะ Bulk — USB488 มี Interrupt-IN เพิ่มมา ห้ามใช้อ่านคำตอบ SCPI
+                            if (pipeInfo.PipeType != USBD_PIPE_TYPE_BULK) continue;
+
                             if ((pipeInfo.PipeId & 0x80) != 0)
-                                inPipeId = pipeInfo.PipeId;
+                            {
+                                if (!foundIn) { inPipeId = pipeInfo.PipeId; foundIn = true; }
+                            }
                             else
-                                outPipeId = pipeInfo.PipeId;
+                            {
+                                if (!foundOut) { outPipeId = pipeInfo.PipeId; foundOut = true; }
+                            }
                         }
                     }
                 }
@@ -1900,6 +1930,34 @@ namespace Themister_Real
                 inPipeId = 0x81;
                 outPipeId = 0x02;
             }
+        }
+
+        // USB488 REN_CONTROL (bRequest 160): เปิด Remote Enable แบบเดียวกับที่ VISA ทำ — เครื่องที่ไม่รองรับจะ Stall แล้วข้ามไป
+        private void SendUsb488RemoteEnable()
+        {
+            if (!isUsb488Interface) return;
+
+            try
+            {
+                WINUSB_SETUP_PACKET setup = new WINUSB_SETUP_PACKET
+                {
+                    RequestType = 0xA1,
+                    Request = 160,
+                    Value = 1,
+                    Index = usbInterfaceNumber,
+                    Length = 1
+                };
+                byte[] status = new byte[1];
+                uint transferred = 0;
+                WinUsb_ControlTransfer(winUsbHandle, setup, status, 1, ref transferred, IntPtr.Zero);
+            }
+            catch { }
+        }
+
+        // Picotest ใช้ SYST:REM มาตลอด / Chroma 12061 (SCPI แบบ 34401) ไม่มีคำสั่งนี้ทาง USB จะขึ้น Error
+        private void SendRemoteModeCommand()
+        {
+            if (dmmUsesSystRemote) SendUsbTmcCommand("SYST:REM\n");
         }
 
         private void SetPipeTimeout(byte pipeId, uint timeoutMs)
@@ -2147,12 +2205,59 @@ namespace Themister_Real
             }
         }
 
+        // ทดสอบวัด 1 ครั้งด้วยค่าที่ตั้งไว้บนเครื่อง — ใช้เช็คที่หน้างานว่าสั่ง DMM ได้จริง
+        private async void btTestThermistor_Click(object sender, EventArgs e)
+        {
+            if (winUsbHandle == IntPtr.Zero)
+            {
+                lbThermistorInfo.Text = "ยังไม่ได้เชื่อมต่อ Thermistor";
+                return;
+            }
+            if (isSequenceRunning)
+            {
+                MessageBox.Show("กรุณากด Stop ก่อนทดสอบ Thermistor", "Thermistor", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            btTestThermistor.Enabled = false;
+            lbThermistorInfo.Text = "กำลังทดสอบ READ? ...";
+
+            string raw;
+            await dmmLock.WaitAsync();
+            try
+            {
+                raw = await Task.Run(() =>
+                {
+                    SendRemoteModeCommand();
+                    SendUsbTmcCommand("TRIG:SOUR IMM\n");
+                    SendUsbTmcCommand("READ?\n");
+                    Thread.Sleep(150);
+                    return ReadUsbTmcResponse();
+                });
+            }
+            finally
+            {
+                dmmLock.Release();
+                btTestThermistor.Enabled = true;
+            }
+
+            lbThermistorInfo.Text = $"{FormatDmmIdn()}\nREAD? = {(string.IsNullOrEmpty(raw) ? "(ไม่ได้รับคำตอบ)" : raw)}";
+        }
+
+        private string FormatDmmIdn()
+        {
+            string idn = dmmIdn;
+            return string.IsNullOrEmpty(idn) ? "ID: (เครื่องไม่ตอบ *IDN?)" : $"ID: {idn}";
+        }
+
         private void UpdateThermistorUi(bool isConnected)
         {
             btConnectThermistor.Text = isConnected ? "Disconnect" : "Connect";
             btConnectThermistor.BackColor = isConnected ? ThemeSuccess : ThemePrimary;
             cbThermistorUsb.Enabled = !isConnected;
             btRefreshThermistorUsb.Enabled = !isConnected;
+            btTestThermistor.Enabled = isConnected;
+            lbThermistorInfo.Text = isConnected ? FormatDmmIdn() : string.Empty;
         }
 
         #endregion
@@ -2190,6 +2295,24 @@ namespace Themister_Real
 
         [DllImport("winusb.dll", SetLastError = true)]
         private static extern bool WinUsb_SetPipePolicy(IntPtr InterfaceHandle, byte PipeID, uint PolicyType, uint ValueLength, ref uint Value);
+
+        [DllImport("winusb.dll", SetLastError = true)]
+        private static extern bool WinUsb_SetPipePolicy(IntPtr InterfaceHandle, byte PipeID, uint PolicyType, uint ValueLength, ref byte Value);
+
+        [DllImport("winusb.dll", SetLastError = true)]
+        private static extern bool WinUsb_ControlTransfer(IntPtr InterfaceHandle, WINUSB_SETUP_PACKET SetupPacket, byte[] Buffer, uint BufferLength, ref uint LengthTransferred, IntPtr Overlapped);
+
+        private const int USBD_PIPE_TYPE_BULK = 2;
+
+        [StructLayout(LayoutKind.Sequential, Pack = 1)]
+        private struct WINUSB_SETUP_PACKET
+        {
+            public byte RequestType;
+            public byte Request;
+            public ushort Value;
+            public ushort Index;
+            public ushort Length;
+        }
 
         [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]
         private static extern SafeFileHandle CreateFile(string lpFileName, uint dwDesiredAccess, uint dwShareMode, IntPtr lpSecurityAttributes, uint dwCreationDisposition, uint dwFlagsAndAttributes, IntPtr hTemplateFile);
