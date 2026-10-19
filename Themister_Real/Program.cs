@@ -16,7 +16,8 @@ namespace Themister_Real
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new Login_Form());
+            UserSession.EmployeeId = "86727533";
+            Application.Run(new Form2());
         }
     }
 }
