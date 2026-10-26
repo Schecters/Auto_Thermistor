@@ -19,3 +19,4 @@
 - [2026-10-15 — ป้าย PASS/FAIL ตัดคำ + แก้จุดเสี่ยงจากการตรวจโค้ด](changes/2026-10-15_passfail-label-and-fixes.md)
 - [2026-10-16 — Thermistor: เลือกอุปกรณ์ USB จาก Dropdown + เลิก Popup แจ้งหลุด](changes/2026-10-16_thermistor-usb-dropdown.md)
 - [2026-10-16 — รองรับ Chroma 12061 ผ่าน USB (ยังใช้กับ Picotest ได้)](changes/2026-10-16_chroma-12061-support.md)
+- [2026-10-26 — เปิด Form2 ทันที, ล็อก Line/Station/MO/MES, ตรวจสิทธิ์พนักงานผ่าน API](changes/2026-10-26_open-form2-direct-operator-check.md)
