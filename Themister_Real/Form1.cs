@@ -67,10 +67,9 @@ namespace Themister_Real
 
                             MessageBox.Show($"ยินดีต้อนรับคุณ {name}\nเข้าสู่ระบบด้วยสิทธิ์: {role}", "เข้าสู่ระบบสำเร็จ", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
-                            Form2 f2 = new Form2();
-                            f2.Show();
-
-                            this.Hide();
+                            // เปิดเป็น Popup จาก btSetting ของ Form2 → ส่งผลกลับแล้วปิด
+                            this.DialogResult = DialogResult.OK;
+                            this.Close();
                         }
                         else
                         {

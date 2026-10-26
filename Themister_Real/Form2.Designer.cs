@@ -102,6 +102,7 @@
             this.txtMN1 = new System.Windows.Forms.TextBox();
             this.tabPage3 = new System.Windows.Forms.TabPage();
             this.tabPage5 = new System.Windows.Forms.TabPage();
+            this.cbPopup = new System.Windows.Forms.ComboBox();
             this.lbThermistorInfo = new System.Windows.Forms.Label();
             this.btTestThermistor = new System.Windows.Forms.Button();
             this.btConnectThermistor = new System.Windows.Forms.Button();
@@ -122,7 +123,6 @@
             this.colTimeEnd = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.groupBox1 = new System.Windows.Forms.GroupBox();
             this.groupBox2 = new System.Windows.Forms.GroupBox();
-            this.cbPopup = new System.Windows.Forms.ComboBox();
             this.label18 = new System.Windows.Forms.Label();
             this.cbMES = new System.Windows.Forms.ComboBox();
             this.txtSection = new System.Windows.Forms.TextBox();
@@ -141,6 +141,9 @@
             this.pnThermistorConnection = new System.Windows.Forms.Panel();
             this.label17 = new System.Windows.Forms.Label();
             this.comboBox2 = new System.Windows.Forms.ComboBox();
+            this.txtEMPID = new System.Windows.Forms.TextBox();
+            this.label14 = new System.Windows.Forms.Label();
+            this.btSetting = new System.Windows.Forms.Button();
             this.tabControl1.SuspendLayout();
             this.tabPage1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.dgvSensorResults)).BeginInit();
@@ -156,7 +159,7 @@
             this.cbLines.Location = new System.Drawing.Point(121, 38);
             this.cbLines.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.cbLines.Name = "cbLines";
-            this.cbLines.Size = new System.Drawing.Size(125, 24);
+            this.cbLines.Size = new System.Drawing.Size(125, 21);
             this.cbLines.TabIndex = 0;
             this.cbLines.SelectedIndexChanged += new System.EventHandler(this.cbLines_SelectedIndexChanged);
             // 
@@ -165,7 +168,7 @@
             this.label1.AutoSize = true;
             this.label1.Location = new System.Drawing.Point(69, 41);
             this.label1.Name = "label1";
-            this.label1.Size = new System.Drawing.Size(38, 16);
+            this.label1.Size = new System.Drawing.Size(33, 13);
             this.label1.TabIndex = 1;
             this.label1.Text = "Line :";
             // 
@@ -174,7 +177,7 @@
             this.label2.AutoSize = true;
             this.label2.Location = new System.Drawing.Point(295, 44);
             this.label2.Name = "label2";
-            this.label2.Size = new System.Drawing.Size(54, 16);
+            this.label2.Size = new System.Drawing.Size(46, 13);
             this.label2.TabIndex = 2;
             this.label2.Text = "Station :";
             // 
@@ -184,7 +187,7 @@
             this.cbStations.Location = new System.Drawing.Point(359, 41);
             this.cbStations.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.cbStations.Name = "cbStations";
-            this.cbStations.Size = new System.Drawing.Size(185, 24);
+            this.cbStations.Size = new System.Drawing.Size(185, 21);
             this.cbStations.TabIndex = 3;
             // 
             // label4
@@ -192,7 +195,7 @@
             this.label4.AutoSize = true;
             this.label4.Location = new System.Drawing.Point(21, 50);
             this.label4.Name = "label4";
-            this.label4.Size = new System.Drawing.Size(25, 16);
+            this.label4.Size = new System.Drawing.Size(23, 13);
             this.label4.TabIndex = 5;
             this.label4.Text = "IP :";
             // 
@@ -201,7 +204,7 @@
             this.txtIP.Location = new System.Drawing.Point(53, 48);
             this.txtIP.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.txtIP.Name = "txtIP";
-            this.txtIP.Size = new System.Drawing.Size(121, 22);
+            this.txtIP.Size = new System.Drawing.Size(121, 20);
             this.txtIP.TabIndex = 6;
             // 
             // txtPort
@@ -209,7 +212,7 @@
             this.txtPort.Location = new System.Drawing.Point(237, 48);
             this.txtPort.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.txtPort.Name = "txtPort";
-            this.txtPort.Size = new System.Drawing.Size(100, 22);
+            this.txtPort.Size = new System.Drawing.Size(100, 20);
             this.txtPort.TabIndex = 8;
             // 
             // label5
@@ -217,7 +220,7 @@
             this.label5.AutoSize = true;
             this.label5.Location = new System.Drawing.Point(181, 50);
             this.label5.Name = "label5";
-            this.label5.Size = new System.Drawing.Size(51, 16);
+            this.label5.Size = new System.Drawing.Size(43, 13);
             this.label5.TabIndex = 7;
             this.label5.Text = "PORT :";
             // 
@@ -231,7 +234,7 @@
             this.cbSlave.Location = new System.Drawing.Point(415, 48);
             this.cbSlave.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.cbSlave.Name = "cbSlave";
-            this.cbSlave.Size = new System.Drawing.Size(49, 24);
+            this.cbSlave.Size = new System.Drawing.Size(49, 21);
             this.cbSlave.TabIndex = 9;
             // 
             // label6
@@ -239,7 +242,7 @@
             this.label6.AutoSize = true;
             this.label6.Location = new System.Drawing.Point(353, 50);
             this.label6.Name = "label6";
-            this.label6.Size = new System.Drawing.Size(56, 16);
+            this.label6.Size = new System.Drawing.Size(47, 13);
             this.label6.TabIndex = 10;
             this.label6.Text = "SLAVE :";
             // 
@@ -269,11 +272,11 @@
             this.tabPage1.Controls.Add(this.btPLCStart);
             this.tabPage1.Controls.Add(this.label3);
             this.tabPage1.Controls.Add(this.cbStep);
-            this.tabPage1.Location = new System.Drawing.Point(4, 25);
+            this.tabPage1.Location = new System.Drawing.Point(4, 22);
             this.tabPage1.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.tabPage1.Name = "tabPage1";
             this.tabPage1.Padding = new System.Windows.Forms.Padding(3, 2, 3, 2);
-            this.tabPage1.Size = new System.Drawing.Size(830, 460);
+            this.tabPage1.Size = new System.Drawing.Size(830, 463);
             this.tabPage1.TabIndex = 0;
             this.tabPage1.Text = "Auto";
             this.tabPage1.UseVisualStyleBackColor = true;
@@ -330,7 +333,7 @@
             this.label13.AutoSize = true;
             this.label13.Location = new System.Drawing.Point(11, 29);
             this.label13.Name = "label13";
-            this.label13.Size = new System.Drawing.Size(32, 16);
+            this.label13.Size = new System.Drawing.Size(28, 13);
             this.label13.TabIndex = 13;
             this.label13.Text = "SN :";
             // 
@@ -379,7 +382,7 @@
             this.label3.AutoSize = true;
             this.label3.Location = new System.Drawing.Point(5, 163);
             this.label3.Name = "label3";
-            this.label3.Size = new System.Drawing.Size(51, 16);
+            this.label3.Size = new System.Drawing.Size(42, 13);
             this.label3.TabIndex = 1;
             this.label3.Text = "Model :";
             // 
@@ -389,7 +392,7 @@
             this.cbStep.Location = new System.Drawing.Point(62, 160);
             this.cbStep.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.cbStep.Name = "cbStep";
-            this.cbStep.Size = new System.Drawing.Size(227, 24);
+            this.cbStep.Size = new System.Drawing.Size(227, 21);
             this.cbStep.TabIndex = 0;
             // 
             // tabPage2
@@ -442,11 +445,11 @@
             this.tabPage2.Controls.Add(this.txtMN3);
             this.tabPage2.Controls.Add(this.txtMN2);
             this.tabPage2.Controls.Add(this.txtMN1);
-            this.tabPage2.Location = new System.Drawing.Point(4, 25);
+            this.tabPage2.Location = new System.Drawing.Point(4, 22);
             this.tabPage2.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.tabPage2.Name = "tabPage2";
             this.tabPage2.Padding = new System.Windows.Forms.Padding(3, 2, 3, 2);
-            this.tabPage2.Size = new System.Drawing.Size(830, 460);
+            this.tabPage2.Size = new System.Drawing.Size(830, 463);
             this.tabPage2.TabIndex = 1;
             this.tabPage2.Text = "Manual";
             this.tabPage2.UseVisualStyleBackColor = true;
@@ -828,7 +831,7 @@
             this.txtMN12.Location = new System.Drawing.Point(347, 306);
             this.txtMN12.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.txtMN12.Name = "txtMN12";
-            this.txtMN12.Size = new System.Drawing.Size(100, 22);
+            this.txtMN12.Size = new System.Drawing.Size(100, 20);
             this.txtMN12.TabIndex = 20;
             // 
             // txtMN11
@@ -836,7 +839,7 @@
             this.txtMN11.Location = new System.Drawing.Point(347, 251);
             this.txtMN11.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.txtMN11.Name = "txtMN11";
-            this.txtMN11.Size = new System.Drawing.Size(100, 22);
+            this.txtMN11.Size = new System.Drawing.Size(100, 20);
             this.txtMN11.TabIndex = 19;
             // 
             // txtMN10
@@ -844,7 +847,7 @@
             this.txtMN10.Location = new System.Drawing.Point(347, 196);
             this.txtMN10.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.txtMN10.Name = "txtMN10";
-            this.txtMN10.Size = new System.Drawing.Size(100, 22);
+            this.txtMN10.Size = new System.Drawing.Size(100, 20);
             this.txtMN10.TabIndex = 18;
             // 
             // txtMN9
@@ -852,7 +855,7 @@
             this.txtMN9.Location = new System.Drawing.Point(347, 142);
             this.txtMN9.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.txtMN9.Name = "txtMN9";
-            this.txtMN9.Size = new System.Drawing.Size(100, 22);
+            this.txtMN9.Size = new System.Drawing.Size(100, 20);
             this.txtMN9.TabIndex = 17;
             // 
             // txtMN8
@@ -860,7 +863,7 @@
             this.txtMN8.Location = new System.Drawing.Point(347, 86);
             this.txtMN8.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.txtMN8.Name = "txtMN8";
-            this.txtMN8.Size = new System.Drawing.Size(100, 22);
+            this.txtMN8.Size = new System.Drawing.Size(100, 20);
             this.txtMN8.TabIndex = 16;
             // 
             // txtMN7
@@ -868,7 +871,7 @@
             this.txtMN7.Location = new System.Drawing.Point(347, 31);
             this.txtMN7.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.txtMN7.Name = "txtMN7";
-            this.txtMN7.Size = new System.Drawing.Size(100, 22);
+            this.txtMN7.Size = new System.Drawing.Size(100, 20);
             this.txtMN7.TabIndex = 15;
             // 
             // txtMN6
@@ -876,7 +879,7 @@
             this.txtMN6.Location = new System.Drawing.Point(48, 306);
             this.txtMN6.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.txtMN6.Name = "txtMN6";
-            this.txtMN6.Size = new System.Drawing.Size(100, 22);
+            this.txtMN6.Size = new System.Drawing.Size(100, 20);
             this.txtMN6.TabIndex = 14;
             // 
             // txtMN5
@@ -884,7 +887,7 @@
             this.txtMN5.Location = new System.Drawing.Point(48, 251);
             this.txtMN5.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.txtMN5.Name = "txtMN5";
-            this.txtMN5.Size = new System.Drawing.Size(100, 22);
+            this.txtMN5.Size = new System.Drawing.Size(100, 20);
             this.txtMN5.TabIndex = 13;
             // 
             // txtMN4
@@ -892,7 +895,7 @@
             this.txtMN4.Location = new System.Drawing.Point(48, 196);
             this.txtMN4.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.txtMN4.Name = "txtMN4";
-            this.txtMN4.Size = new System.Drawing.Size(100, 22);
+            this.txtMN4.Size = new System.Drawing.Size(100, 20);
             this.txtMN4.TabIndex = 12;
             // 
             // txtMN3
@@ -900,7 +903,7 @@
             this.txtMN3.Location = new System.Drawing.Point(48, 142);
             this.txtMN3.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.txtMN3.Name = "txtMN3";
-            this.txtMN3.Size = new System.Drawing.Size(100, 22);
+            this.txtMN3.Size = new System.Drawing.Size(100, 20);
             this.txtMN3.TabIndex = 11;
             // 
             // txtMN2
@@ -908,7 +911,7 @@
             this.txtMN2.Location = new System.Drawing.Point(48, 86);
             this.txtMN2.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.txtMN2.Name = "txtMN2";
-            this.txtMN2.Size = new System.Drawing.Size(100, 22);
+            this.txtMN2.Size = new System.Drawing.Size(100, 20);
             this.txtMN2.TabIndex = 10;
             // 
             // txtMN1
@@ -916,21 +919,22 @@
             this.txtMN1.Location = new System.Drawing.Point(48, 31);
             this.txtMN1.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.txtMN1.Name = "txtMN1";
-            this.txtMN1.Size = new System.Drawing.Size(100, 22);
+            this.txtMN1.Size = new System.Drawing.Size(100, 20);
             this.txtMN1.TabIndex = 9;
             // 
             // tabPage3
             // 
-            this.tabPage3.Location = new System.Drawing.Point(4, 25);
+            this.tabPage3.Location = new System.Drawing.Point(4, 22);
             this.tabPage3.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.tabPage3.Name = "tabPage3";
-            this.tabPage3.Size = new System.Drawing.Size(830, 460);
+            this.tabPage3.Size = new System.Drawing.Size(830, 463);
             this.tabPage3.TabIndex = 2;
             this.tabPage3.Text = "I/O";
             this.tabPage3.UseVisualStyleBackColor = true;
             // 
             // tabPage5
             // 
+            this.tabPage5.Controls.Add(this.cbPopup);
             this.tabPage5.Controls.Add(this.lbThermistorInfo);
             this.tabPage5.Controls.Add(this.btTestThermistor);
             this.tabPage5.Controls.Add(this.btConnectThermistor);
@@ -950,27 +954,33 @@
             this.tabPage5.Controls.Add(this.txtIP);
             this.tabPage5.Controls.Add(this.label4);
             this.tabPage5.Controls.Add(this.label6);
-            this.tabPage5.Location = new System.Drawing.Point(4, 25);
+            this.tabPage5.Location = new System.Drawing.Point(4, 22);
             this.tabPage5.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.tabPage5.Name = "tabPage5";
             this.tabPage5.Padding = new System.Windows.Forms.Padding(3, 2, 3, 2);
-            this.tabPage5.Size = new System.Drawing.Size(830, 460);
+            this.tabPage5.Size = new System.Drawing.Size(830, 463);
             this.tabPage5.TabIndex = 3;
             this.tabPage5.Text = "Connection";
             this.tabPage5.UseVisualStyleBackColor = true;
-            //
-            // btConnectThermistor
-            //
-            this.btConnectThermistor.Location = new System.Drawing.Point(567, 232);
-            this.btConnectThermistor.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
-            this.btConnectThermistor.Name = "btConnectThermistor";
-            this.btConnectThermistor.Size = new System.Drawing.Size(91, 30);
-            this.btConnectThermistor.TabIndex = 22;
-            this.btConnectThermistor.Text = "Connect";
-            this.btConnectThermistor.UseVisualStyleBackColor = true;
-            //
+            // 
+            // cbPopup
+            // 
+            this.cbPopup.FormattingEnabled = true;
+            this.cbPopup.Location = new System.Drawing.Point(616, 48);
+            this.cbPopup.Name = "cbPopup";
+            this.cbPopup.Size = new System.Drawing.Size(125, 21);
+            this.cbPopup.TabIndex = 19;
+            // 
+            // lbThermistorInfo
+            // 
+            this.lbThermistorInfo.AutoSize = true;
+            this.lbThermistorInfo.Location = new System.Drawing.Point(21, 270);
+            this.lbThermistorInfo.Name = "lbThermistorInfo";
+            this.lbThermistorInfo.Size = new System.Drawing.Size(0, 13);
+            this.lbThermistorInfo.TabIndex = 24;
+            // 
             // btTestThermistor
-            //
+            // 
             this.btTestThermistor.Enabled = false;
             this.btTestThermistor.Location = new System.Drawing.Point(664, 232);
             this.btTestThermistor.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
@@ -979,17 +989,19 @@
             this.btTestThermistor.TabIndex = 23;
             this.btTestThermistor.Text = "Test";
             this.btTestThermistor.UseVisualStyleBackColor = true;
-            //
-            // lbThermistorInfo
-            //
-            this.lbThermistorInfo.AutoSize = true;
-            this.lbThermistorInfo.Location = new System.Drawing.Point(21, 270);
-            this.lbThermistorInfo.Name = "lbThermistorInfo";
-            this.lbThermistorInfo.Size = new System.Drawing.Size(0, 16);
-            this.lbThermistorInfo.TabIndex = 24;
-            //
+            // 
+            // btConnectThermistor
+            // 
+            this.btConnectThermistor.Location = new System.Drawing.Point(567, 232);
+            this.btConnectThermistor.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
+            this.btConnectThermistor.Name = "btConnectThermistor";
+            this.btConnectThermistor.Size = new System.Drawing.Size(91, 30);
+            this.btConnectThermistor.TabIndex = 22;
+            this.btConnectThermistor.Text = "Connect";
+            this.btConnectThermistor.UseVisualStyleBackColor = true;
+            // 
             // btRefreshThermistorUsb
-            //
+            // 
             this.btRefreshThermistorUsb.Location = new System.Drawing.Point(470, 232);
             this.btRefreshThermistorUsb.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.btRefreshThermistorUsb.Name = "btRefreshThermistorUsb";
@@ -997,26 +1009,26 @@
             this.btRefreshThermistorUsb.TabIndex = 21;
             this.btRefreshThermistorUsb.Text = "Refresh";
             this.btRefreshThermistorUsb.UseVisualStyleBackColor = true;
-            //
+            // 
             // cbThermistorUsb
-            //
+            // 
             this.cbThermistorUsb.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.cbThermistorUsb.FormattingEnabled = true;
             this.cbThermistorUsb.Location = new System.Drawing.Point(21, 235);
             this.cbThermistorUsb.Name = "cbThermistorUsb";
-            this.cbThermistorUsb.Size = new System.Drawing.Size(440, 24);
+            this.cbThermistorUsb.Size = new System.Drawing.Size(440, 21);
             this.cbThermistorUsb.TabIndex = 20;
-            //
+            // 
             // label21
-            //
+            // 
             this.label21.AutoSize = true;
             this.label21.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F);
             this.label21.Location = new System.Drawing.Point(17, 202);
             this.label21.Name = "label21";
-            this.label21.Size = new System.Drawing.Size(136, 20);
+            this.label21.Size = new System.Drawing.Size(132, 20);
             this.label21.TabIndex = 19;
             this.label21.Text = "Thermistor (USB)";
-            //
+            // 
             // btConnectKeynce
             // 
             this.btConnectKeynce.Location = new System.Drawing.Point(373, 144);
@@ -1032,7 +1044,7 @@
             this.label20.AutoSize = true;
             this.label20.Location = new System.Drawing.Point(21, 151);
             this.label20.Name = "label20";
-            this.label20.Size = new System.Drawing.Size(25, 16);
+            this.label20.Size = new System.Drawing.Size(23, 13);
             this.label20.TabIndex = 17;
             this.label20.Text = "IP :";
             // 
@@ -1041,7 +1053,7 @@
             this.label19.AutoSize = true;
             this.label19.Location = new System.Drawing.Point(181, 151);
             this.label19.Name = "label19";
-            this.label19.Size = new System.Drawing.Size(51, 16);
+            this.label19.Size = new System.Drawing.Size(43, 13);
             this.label19.TabIndex = 16;
             this.label19.Text = "PORT :";
             // 
@@ -1050,7 +1062,7 @@
             this.txtPortKeynce.Location = new System.Drawing.Point(237, 148);
             this.txtPortKeynce.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.txtPortKeynce.Name = "txtPortKeynce";
-            this.txtPortKeynce.Size = new System.Drawing.Size(100, 22);
+            this.txtPortKeynce.Size = new System.Drawing.Size(100, 20);
             this.txtPortKeynce.TabIndex = 15;
             // 
             // txtIPKeynce
@@ -1058,7 +1070,7 @@
             this.txtIPKeynce.Location = new System.Drawing.Point(53, 148);
             this.txtIPKeynce.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.txtIPKeynce.Name = "txtIPKeynce";
-            this.txtIPKeynce.Size = new System.Drawing.Size(121, 22);
+            this.txtIPKeynce.Size = new System.Drawing.Size(121, 20);
             this.txtIPKeynce.TabIndex = 14;
             // 
             // label15
@@ -1131,7 +1143,9 @@
             // 
             // groupBox2
             // 
-            this.groupBox2.Controls.Add(this.cbPopup);
+            this.groupBox2.Controls.Add(this.btSetting);
+            this.groupBox2.Controls.Add(this.label14);
+            this.groupBox2.Controls.Add(this.txtEMPID);
             this.groupBox2.Controls.Add(this.label18);
             this.groupBox2.Controls.Add(this.cbMES);
             this.groupBox2.Controls.Add(this.txtSection);
@@ -1155,20 +1169,12 @@
             this.groupBox2.TabStop = false;
             this.groupBox2.Text = "MES";
             // 
-            // cbPopup
-            // 
-            this.cbPopup.FormattingEnabled = true;
-            this.cbPopup.Location = new System.Drawing.Point(121, 246);
-            this.cbPopup.Name = "cbPopup";
-            this.cbPopup.Size = new System.Drawing.Size(125, 24);
-            this.cbPopup.TabIndex = 19;
-            // 
             // label18
             // 
             this.label18.AutoSize = true;
             this.label18.Location = new System.Drawing.Point(65, 197);
             this.label18.Name = "label18";
-            this.label18.Size = new System.Drawing.Size(42, 16);
+            this.label18.Size = new System.Drawing.Size(36, 13);
             this.label18.TabIndex = 18;
             this.label18.Text = "MES :";
             // 
@@ -1177,7 +1183,7 @@
             this.cbMES.FormattingEnabled = true;
             this.cbMES.Location = new System.Drawing.Point(121, 192);
             this.cbMES.Name = "cbMES";
-            this.cbMES.Size = new System.Drawing.Size(125, 24);
+            this.cbMES.Size = new System.Drawing.Size(125, 21);
             this.cbMES.TabIndex = 17;
             // 
             // txtSection
@@ -1186,7 +1192,7 @@
             this.txtSection.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.txtSection.Name = "txtSection";
             this.txtSection.ReadOnly = true;
-            this.txtSection.Size = new System.Drawing.Size(125, 22);
+            this.txtSection.Size = new System.Drawing.Size(125, 20);
             this.txtSection.TabIndex = 11;
             // 
             // txtGroup
@@ -1195,7 +1201,7 @@
             this.txtGroup.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.txtGroup.Name = "txtGroup";
             this.txtGroup.ReadOnly = true;
-            this.txtGroup.Size = new System.Drawing.Size(185, 22);
+            this.txtGroup.Size = new System.Drawing.Size(185, 20);
             this.txtGroup.TabIndex = 10;
             // 
             // label12
@@ -1203,7 +1209,7 @@
             this.label12.AutoSize = true;
             this.label12.Location = new System.Drawing.Point(51, 89);
             this.label12.Name = "label12";
-            this.label12.Size = new System.Drawing.Size(58, 16);
+            this.label12.Size = new System.Drawing.Size(49, 13);
             this.label12.TabIndex = 9;
             this.label12.Text = "Section :";
             // 
@@ -1212,7 +1218,7 @@
             this.label11.AutoSize = true;
             this.label11.Location = new System.Drawing.Point(299, 89);
             this.label11.Name = "label11";
-            this.label11.Size = new System.Drawing.Size(50, 16);
+            this.label11.Size = new System.Drawing.Size(42, 13);
             this.label11.TabIndex = 8;
             this.label11.Text = "Group :";
             // 
@@ -1221,16 +1227,16 @@
             this.label9.AutoSize = true;
             this.label9.Location = new System.Drawing.Point(25, 143);
             this.label9.Name = "label9";
-            this.label9.Size = new System.Drawing.Size(82, 16);
+            this.label9.Size = new System.Drawing.Size(68, 13);
             this.label9.TabIndex = 7;
             this.label9.Text = "Work Order :";
             // 
             // label8
             // 
             this.label8.AutoSize = true;
-            this.label8.Location = new System.Drawing.Point(259, 141);
+            this.label8.Location = new System.Drawing.Point(268, 142);
             this.label8.Name = "label8";
-            this.label8.Size = new System.Drawing.Size(91, 16);
+            this.label8.Size = new System.Drawing.Size(73, 13);
             this.label8.TabIndex = 6;
             this.label8.Text = "Model Name :";
             // 
@@ -1240,7 +1246,7 @@
             this.txtModel.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.txtModel.Name = "txtModel";
             this.txtModel.ReadOnly = true;
-            this.txtModel.Size = new System.Drawing.Size(185, 22);
+            this.txtModel.Size = new System.Drawing.Size(185, 20);
             this.txtModel.TabIndex = 5;
             // 
             // cbMO
@@ -1249,7 +1255,7 @@
             this.cbMO.Location = new System.Drawing.Point(121, 142);
             this.cbMO.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.cbMO.Name = "cbMO";
-            this.cbMO.Size = new System.Drawing.Size(125, 24);
+            this.cbMO.Size = new System.Drawing.Size(125, 21);
             this.cbMO.TabIndex = 4;
             // 
             // label10
@@ -1291,7 +1297,7 @@
             this.label16.AutoSize = true;
             this.label16.Location = new System.Drawing.Point(27, 25);
             this.label16.Name = "label16";
-            this.label16.Size = new System.Drawing.Size(38, 16);
+            this.label16.Size = new System.Drawing.Size(33, 13);
             this.label16.TabIndex = 14;
             this.label16.Text = "PLC :";
             // 
@@ -1308,7 +1314,7 @@
             this.label17.AutoSize = true;
             this.label17.Location = new System.Drawing.Point(109, 25);
             this.label17.Name = "label17";
-            this.label17.Size = new System.Drawing.Size(77, 16);
+            this.label17.Size = new System.Drawing.Size(62, 13);
             this.label17.TabIndex = 15;
             this.label17.Text = "Thermistor :";
             // 
@@ -1317,9 +1323,35 @@
             this.comboBox2.FormattingEnabled = true;
             this.comboBox2.Location = new System.Drawing.Point(154, 256);
             this.comboBox2.Name = "comboBox2";
-            this.comboBox2.Size = new System.Drawing.Size(19, 24);
+            this.comboBox2.Size = new System.Drawing.Size(19, 21);
             this.comboBox2.TabIndex = 20;
             // 
+            // txtEMPID
+            // 
+            this.txtEMPID.Location = new System.Drawing.Point(359, 194);
+            this.txtEMPID.Name = "txtEMPID";
+            this.txtEMPID.Size = new System.Drawing.Size(185, 20);
+            this.txtEMPID.TabIndex = 19;
+            // 
+            // label14
+            // 
+            this.label14.AutoSize = true;
+            this.label14.Location = new System.Drawing.Point(265, 197);
+            this.label14.Name = "label14";
+            this.label14.Size = new System.Drawing.Size(76, 13);
+            this.label14.TabIndex = 20;
+            this.label14.Text = "Employee ID  :";
+            //
+            // btSetting
+            //
+            this.btSetting.Location = new System.Drawing.Point(564, 35);
+            this.btSetting.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
+            this.btSetting.Name = "btSetting";
+            this.btSetting.Size = new System.Drawing.Size(91, 30);
+            this.btSetting.TabIndex = 21;
+            this.btSetting.Text = "Setting";
+            this.btSetting.UseVisualStyleBackColor = true;
+            //
             // Form2
             // 
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.None;
@@ -1465,5 +1497,8 @@
         private System.Windows.Forms.Button btConnectThermistor;
         private System.Windows.Forms.Button btTestThermistor;
         private System.Windows.Forms.Label lbThermistorInfo;
+        private System.Windows.Forms.Label label14;
+        private System.Windows.Forms.TextBox txtEMPID;
+        private System.Windows.Forms.Button btSetting;
     }
 }

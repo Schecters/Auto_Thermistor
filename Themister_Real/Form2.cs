@@ -77,6 +77,19 @@ namespace Themister_Real
         private KeyenceScanner keyenceScanner = null;
         private bool isKeyenceConnecting = false;
 
+        // ---------------- cbPopup ซ่อนไว้ คลิก "Modbus TCP" (label15) 3 ครั้งติดกันเพื่อแสดง ----------------
+        private const int PopupUnlockClickCount = 3;
+        private static readonly TimeSpan PopupUnlockClickInterval = TimeSpan.FromMilliseconds(1500);
+        private int popupUnlockClicks = 0;
+        private DateTime lastPopupUnlockClick = DateTime.MinValue;
+
+        // ---------------- Setting Lock (cbLines / cbStations / cbMO / cbMES) & ตรวจสิทธิ์พนักงาน ----------------
+        // ปลดล็อกได้ด้วยการ Login (ME/ADMIN) ผ่าน btSetting เท่านั้น
+        private bool isSettingUnlocked = false;
+        // รหัสพนักงานที่ผ่านการตรวจ operator-data แล้ว (ว่าง = ยังไม่อนุญาตให้ทำงาน)
+        private string verifiedOperatorId = "";
+        private bool isVerifyingOperator = false;
+
         // ตัวแปรเก็บ Mapping ระหว่าง Line -> รายชื่อ Station ทั้งหมด
         private readonly Dictionary<string, List<string>> lineStationMap = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
 
@@ -97,6 +110,10 @@ namespace Themister_Real
         // URL สำหรับ API Backend
         private const string API_PLC_SEQUENCE_URL = "http://10.204.206.1:5000/api/plc/sequence";
         private const string API_MES_BASE_URL = "http://10.204.212.22:5207/api/mes";
+        private const string API_OPERATOR_DATA_URL = "http://10.204.206.1:5000/api/operator-data";
+        private const string OPERATOR_STATION = "THM";
+        // API lineinfo / molist ต้องมี empNo เสมอ ใช้ค่านี้เมื่อยังไม่มีใคร Login
+        private const string DEFAULT_MES_EMP_NO = "86727533";
 
         public Form2()
         {
@@ -114,6 +131,9 @@ namespace Themister_Real
 
         private async void Form2_BarcodeKeyPress(object sender, KeyPressEventArgs e)
         {
+            // กำลังกรอก/สแกนรหัสพนักงาน → ให้ตัวอักษรลง txtEMPID ตามปกติ
+            if (txtEMPID.Focused) return;
+
             TimeSpan elapsed = DateTime.Now - _lastKeystrokeTime;
             _lastKeystrokeTime = DateTime.Now;
 
@@ -165,6 +185,7 @@ namespace Themister_Real
             }
 
             if (isSequenceRunning) return;
+            if (!EnsureOperatorVerified()) return;
 
             // ตรวจสอบโหมด MES / No MES จาก ComboBox cbMES โดยตรง
             string mesMode = cbMES.SelectedItem?.ToString() ?? "MES";
@@ -306,7 +327,7 @@ namespace Themister_Real
             string station = cbStations.SelectedItem?.ToString() ?? "";
             string section = string.IsNullOrEmpty(txtSection.Text.Trim()) ? "" : txtSection.Text.Trim();
             string group = string.IsNullOrEmpty(txtGroup.Text.Trim()) ? "" : txtGroup.Text.Trim();
-            string empNo = !string.IsNullOrEmpty(UserSession.EmployeeId) ? UserSession.EmployeeId : "";
+            string empNo = !string.IsNullOrEmpty(verifiedOperatorId) ? verifiedOperatorId : UserSession.EmployeeId;
             string resultStr = isPass ? "PASS" : "FAIL";
 
             string routingString = $"{sn}}}{mo}}}{model}}}{line}}}{section}}}{group}}}{station}}}}}{resultStr}}}{empNo}}}1";
@@ -389,6 +410,22 @@ namespace Themister_Real
                 cbPopup.Items.Clear();
                 cbPopup.Items.AddRange(new object[] { "Popup", "No Popup" });
                 cbPopup.SelectedIndex = 0;
+                cbPopup.Visible = false;
+                cbPopup.DropDownClosed += (s, ev) => BeginInvoke(new Action(() => cbPopup.Visible = false));
+
+                label15.MouseDown += (s, ev) =>
+                {
+                    DateTime now = DateTime.Now;
+                    popupUnlockClicks = (now - lastPopupUnlockClick <= PopupUnlockClickInterval) ? popupUnlockClicks + 1 : 1;
+                    lastPopupUnlockClick = now;
+                    if (popupUnlockClicks < PopupUnlockClickCount) return;
+
+                    popupUnlockClicks = 0;
+                    cbPopup.Visible = true;
+                    cbPopup.BringToFront();
+                    cbPopup.Focus();
+                    cbPopup.DroppedDown = true;
+                };
             }
 
             cbMES.DropDownStyle = ComboBoxStyle.DropDownList;
@@ -427,6 +464,15 @@ namespace Themister_Real
             if (btRefreshThermistorUsb != null) btRefreshThermistorUsb.Click += btRefreshThermistorUsb_Click;
             if (btConnectThermistor != null) btConnectThermistor.Click += btConnectThermistor_Click;
             if (btTestThermistor != null) btTestThermistor.Click += btTestThermistor_Click;
+            btSetting.Click += btSetting_Click;
+
+            txtEMPID.KeyDown += txtEMPID_KeyDown;
+            txtEMPID.TextChanged += (s, e) =>
+            {
+                if (!isVerifyingOperator) ResetOperatorVerification();
+            };
+            ResetOperatorVerification();
+            ApplySettingLock();
 
             Control[] foundApiTxt = this.Controls.Find("txtAPI", true);
             if (foundApiTxt.Length > 0 && foundApiTxt[0] is TextBox txtApi)
@@ -552,7 +598,7 @@ namespace Themister_Real
             if (available.Width <= 0 || available.Height <= 0) return;
 
             float size = 8f;
-            for (float candidate = 140f; candidate > 8f; candidate -= 2f)
+            for (float candidate = 80f; candidate > 8f; candidate -= 2f)
             {
                 using (var test = new Font(ThemeFontName, candidate, FontStyle.Bold))
                 {
@@ -717,7 +763,7 @@ namespace Themister_Real
 
         private async Task LoadAllLinesAndStationsAsync()
         {
-            string empNo = UserSession.EmployeeId;
+            string empNo = !string.IsNullOrEmpty(UserSession.EmployeeId) ? UserSession.EmployeeId : DEFAULT_MES_EMP_NO;
             cbLines.Enabled = false;
             cbStations.Enabled = false;
 
@@ -742,7 +788,6 @@ namespace Themister_Real
                     }
                     cbLines.EndUpdate();
 
-                    cbLines.Enabled = true;
                     cbLines.SelectedIndex = -1;
                 }
                 else
@@ -756,7 +801,7 @@ namespace Themister_Real
             }
             finally
             {
-                cbLines.Enabled = cbLines.Items.Count > 0;
+                ApplySettingLock();
             }
         }
 
@@ -830,11 +875,14 @@ namespace Themister_Real
             SetTextControl("txtGroup", "");
             SetTextControl("txtSection", "");
 
+            // ผลตรวจพนักงานผูกกับ Line → เปลี่ยน Line ต้องตรวจใหม่
+            ResetOperatorVerification();
+
             if (cbLines.SelectedItem == null)
             {
                 cbStations.Items.Clear();
-                cbStations.Enabled = false;
                 ClearMoAndModelControls();
+                ApplySettingLock();
                 return;
             }
 
@@ -851,15 +899,14 @@ namespace Themister_Real
                 }
 
                 cbStations.EndUpdate();
-                cbStations.Enabled = true;
                 cbStations.SelectedIndex = -1;
             }
             else
             {
                 cbStations.EndUpdate();
-                cbStations.Enabled = false;
             }
 
+            ApplySettingLock();
             await LoadMoListBySelectedLineAsync(selectedLine);
         }
 
@@ -903,7 +950,7 @@ namespace Themister_Real
         {
             ClearMoAndModelControls();
 
-            string empNo = !string.IsNullOrEmpty(UserSession.EmployeeId) ? UserSession.EmployeeId : "86727533";
+            string empNo = !string.IsNullOrEmpty(UserSession.EmployeeId) ? UserSession.EmployeeId : DEFAULT_MES_EMP_NO;
             string url = $"{API_MES_BASE_URL}/query/molist?empNo={empNo}&mode=0&moType=0&line=0";
 
             try
@@ -982,7 +1029,7 @@ namespace Themister_Real
                             }
 
                             cbMo.EndUpdate();
-                            cbMo.Enabled = cbMo.Items.Count > 0;
+                            ApplySettingLock();
 
                             if (cbMo.Items.Count > 0)
                             {
@@ -1044,6 +1091,192 @@ namespace Themister_Real
             }
 
             SetTxtModelText("");
+        }
+
+        #endregion
+
+        #region Setting Lock & Operator Check (operator-data API)
+
+        // cbLines / cbStations / cbMO / cbMES แก้ได้เฉพาะตอนปลดล็อกผ่าน btSetting
+        private void ApplySettingLock()
+        {
+            cbLines.Enabled = isSettingUnlocked && cbLines.Items.Count > 0;
+            cbStations.Enabled = isSettingUnlocked && cbStations.Items.Count > 0;
+            cbMO.Enabled = isSettingUnlocked && cbMO.Items.Count > 0;
+            cbMES.Enabled = isSettingUnlocked;
+            btSetting.Text = isSettingUnlocked ? "Lock" : "Setting";
+        }
+
+        private void btSetting_Click(object sender, EventArgs e)
+        {
+            if (isSettingUnlocked)
+            {
+                isSettingUnlocked = false;
+                ApplySettingLock();
+                return;
+            }
+
+            using (Login_Form login = new Login_Form())
+            {
+                login.StartPosition = FormStartPosition.CenterParent;
+                if (login.ShowDialog(this) != DialogResult.OK) return;
+            }
+
+            isSettingUnlocked = true;
+            ApplySettingLock();
+        }
+
+        private async void txtEMPID_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode != Keys.Enter) return;
+
+            e.SuppressKeyPress = true;
+            await VerifyOperatorAsync();
+        }
+
+        private void ResetOperatorVerification()
+        {
+            verifiedOperatorId = "";
+            txtEMPID.BackColor = SystemColors.Window;
+        }
+
+        private bool EnsureOperatorVerified()
+        {
+            if (!string.IsNullOrEmpty(verifiedOperatorId)) return true;
+
+            MessageBox.Show("กรุณากรอกรหัสพนักงานที่ช่อง Employee ID แล้วกด Enter ให้ผ่านการตรวจสอบก่อนเริ่มงาน",
+                            "Operator Check", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            txtEMPID.Focus();
+            return false;
+        }
+
+        private async Task VerifyOperatorAsync()
+        {
+            if (isVerifyingOperator) return;
+
+            string empId = txtEMPID.Text.Trim();
+            string line = cbLines.SelectedItem?.ToString() ?? "";
+            ResetOperatorVerification();
+
+            if (string.IsNullOrEmpty(empId))
+            {
+                MessageBox.Show("กรุณากรอกรหัสพนักงาน", "Operator Check", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            if (string.IsNullOrEmpty(line))
+            {
+                MessageBox.Show("ยังไม่ได้เลือก Line กรุณากด Setting เพื่อเลือก Line ก่อน", "Operator Check", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            isVerifyingOperator = true;
+            txtEMPID.ReadOnly = true;
+            txtEMPID.BackColor = Color.FromArgb(254, 243, 199);
+
+            string url = $"{API_OPERATOR_DATA_URL}?employee_id={Uri.EscapeDataString(empId)}&lines={Uri.EscapeDataString(line)}&station={OPERATOR_STATION}";
+
+            try
+            {
+                using (HttpClient client = new HttpClient())
+                {
+                    client.Timeout = TimeSpan.FromSeconds(10);
+                    HttpResponseMessage response = await client.GetAsync(url);
+                    string body = await response.Content.ReadAsStringAsync();
+
+                    // ระหว่างรอ API มีการเปลี่ยน Line → ผลนี้ใช้ไม่ได้แล้ว
+                    if (!string.Equals(cbLines.SelectedItem?.ToString() ?? "", line, StringComparison.OrdinalIgnoreCase))
+                    {
+                        txtEMPID.BackColor = SystemColors.Window;
+                        return;
+                    }
+
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        txtEMPID.BackColor = Color.FromArgb(254, 226, 226);
+                        MessageBox.Show($"ตรวจสอบพนักงานไม่สำเร็จ (HTTP {(int)response.StatusCode}):\n{body}",
+                                        "Operator Check", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        return;
+                    }
+
+                    using (JsonDocument doc = JsonDocument.Parse(body))
+                    {
+                        JsonElement root = doc.RootElement;
+                        string operatorName = GetJsonText(root, "operator_name");
+
+                        JsonElement summary = default;
+                        bool hasSummary = root.TryGetProperty("summary", out summary) && summary.ValueKind == JsonValueKind.Object;
+                        bool allPassed = hasSummary
+                            && summary.TryGetProperty("all_passed", out JsonElement allPassedElem)
+                            && allPassedElem.ValueKind == JsonValueKind.True;
+
+                        if (allPassed)
+                        {
+                            verifiedOperatorId = empId;
+                            txtEMPID.BackColor = Color.FromArgb(220, 252, 231);
+                            MessageBox.Show($"พนักงาน {empId} {operatorName}\nผ่านการตรวจสอบ Line {line} / Station {OPERATOR_STATION}\nอนุญาตให้ทำงานได้",
+                                            "Operator Check: PASS", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                            return;
+                        }
+
+                        List<string> failedExams = new List<string>();
+                        if (root.TryGetProperty("details", out JsonElement details) && details.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (JsonElement exam in details.EnumerateArray())
+                            {
+                                string status = GetJsonText(exam, "status");
+                                if (string.Equals(status, "PASS", StringComparison.OrdinalIgnoreCase)) continue;
+
+                                failedExams.Add($"- {GetJsonText(exam, "exam_key")} {GetJsonText(exam, "exam_name")}\n" +
+                                                $"   คะแนน {GetJsonText(exam, "score")} (ต้องได้อย่างน้อย {GetJsonText(exam, "min_score")}) : {status}");
+                            }
+                        }
+
+                        StringBuilder msg = new StringBuilder();
+                        msg.AppendLine($"พนักงาน {empId} {operatorName}");
+                        msg.AppendLine($"ไม่ผ่านการตรวจสอบ Line {line} / Station {OPERATOR_STATION}");
+                        if (hasSummary)
+                        {
+                            msg.AppendLine($"ผ่าน {GetJsonText(summary, "passed_exams")} จาก {GetJsonText(summary, "total_exams")} หัวข้อ");
+                        }
+                        msg.AppendLine();
+
+                        if (failedExams.Count > 0)
+                        {
+                            msg.AppendLine("หัวข้อที่ไม่ผ่าน:");
+                            msg.AppendLine(string.Join("\n", failedExams));
+                        }
+                        else
+                        {
+                            string serverMsg = GetJsonText(root, "message");
+                            msg.AppendLine(!string.IsNullOrEmpty(serverMsg) ? serverMsg : "ไม่พบข้อมูลการสอบของพนักงานใน Line / Station นี้");
+                        }
+
+                        txtEMPID.BackColor = Color.FromArgb(254, 226, 226);
+                        MessageBox.Show(msg.ToString(), "Operator Check: FAIL", MessageBoxButtons.OK, MessageBoxIcon.Stop);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                txtEMPID.BackColor = Color.FromArgb(254, 226, 226);
+                MessageBox.Show($"ไม่สามารถตรวจสอบพนักงานกับ Server (10.204.206.1:5000) ได้:\n{ex.Message}",
+                                "Operator Check", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                isVerifyingOperator = false;
+                txtEMPID.ReadOnly = false;
+            }
+        }
+
+        // อ่านค่า Property เป็นข้อความ (รองรับทั้ง string และตัวเลข)
+        private static string GetJsonText(JsonElement obj, string name)
+        {
+            if (obj.ValueKind != JsonValueKind.Object || !obj.TryGetProperty(name, out JsonElement value)) return "";
+            if (value.ValueKind == JsonValueKind.String) return value.GetString();
+            if (value.ValueKind == JsonValueKind.Null) return "";
+            return value.GetRawText();
         }
 
         #endregion
@@ -1168,6 +1401,8 @@ namespace Themister_Real
                 MessageBox.Show("ระบบกำลังรัน Step อยู่แล้ว กรุณากด Stop ก่อนหากต้องการเริ่มใหม่", "แจ้งเตือน", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
+
+            if (!EnsureOperatorVerified()) return;
 
             if (tcpClient == null || !tcpClient.Connected || modbusMaster == null)
             {
