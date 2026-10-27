@@ -77,7 +77,7 @@ namespace Themister_Real
         private KeyenceScanner keyenceScanner = null;
         private bool isKeyenceConnecting = false;
 
-        // ---------------- cbManualAuto: Manual = Scanner USB เท่านั้น / Auto = Keyence เท่านั้น + รอ M3031 ก่อนส่ง MES ----------------
+        // ---------------- cbManualAuto: Manual = Scanner USB + Keyence / Auto = Keyence เท่านั้น + รอ M3031 ก่อนส่ง MES ----------------
         private const ushort PlcSendReadyAddress = 3031;
         private bool IsAutoMode => string.Equals(cbManualAuto.SelectedItem?.ToString(), "Auto", StringComparison.OrdinalIgnoreCase);
 
@@ -2801,12 +2801,8 @@ namespace Themister_Real
             if (!this.IsHandleCreated || this.IsDisposed) return;
 
             // "ERROR" (อ่านไม่ออก) ส่งเข้า Flow เดียวกับ Scanner USB — btPLCStart_Click จะตั้ง FAIL และสั่ง M3030 ปล่อยชิ้นงาน
-            // โหมด Manual รับบาร์โค้ดจาก Scanner USB เท่านั้น — เช็ค cbManualAuto บน UI Thread
-            this.BeginInvoke(new Action(async () =>
-            {
-                if (!IsAutoMode) return;
-                await ProcessScannedBarcodeAsync(barcode);
-            }));
+            // รับจาก Keyence ได้ทั้งโหมด Manual และ Auto
+            this.BeginInvoke(new Action(async () => await ProcessScannedBarcodeAsync(barcode)));
         }
 
         #endregion
