@@ -123,6 +123,9 @@
             this.colTimeEnd = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.groupBox1 = new System.Windows.Forms.GroupBox();
             this.groupBox2 = new System.Windows.Forms.GroupBox();
+            this.btSetting = new System.Windows.Forms.Button();
+            this.label14 = new System.Windows.Forms.Label();
+            this.txtEMPID = new System.Windows.Forms.TextBox();
             this.label18 = new System.Windows.Forms.Label();
             this.cbMES = new System.Windows.Forms.ComboBox();
             this.txtSection = new System.Windows.Forms.TextBox();
@@ -141,9 +144,7 @@
             this.pnThermistorConnection = new System.Windows.Forms.Panel();
             this.label17 = new System.Windows.Forms.Label();
             this.comboBox2 = new System.Windows.Forms.ComboBox();
-            this.txtEMPID = new System.Windows.Forms.TextBox();
-            this.label14 = new System.Windows.Forms.Label();
-            this.btSetting = new System.Windows.Forms.Button();
+            this.cbManualAuto = new System.Windows.Forms.ComboBox();
             this.tabControl1.SuspendLayout();
             this.tabPage1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.dgvSensorResults)).BeginInit();
@@ -934,6 +935,7 @@
             // 
             // tabPage5
             // 
+            this.tabPage5.Controls.Add(this.cbManualAuto);
             this.tabPage5.Controls.Add(this.cbPopup);
             this.tabPage5.Controls.Add(this.lbThermistorInfo);
             this.tabPage5.Controls.Add(this.btTestThermistor);
@@ -1169,6 +1171,31 @@
             this.groupBox2.TabStop = false;
             this.groupBox2.Text = "MES";
             // 
+            // btSetting
+            // 
+            this.btSetting.Location = new System.Drawing.Point(469, 460);
+            this.btSetting.Name = "btSetting";
+            this.btSetting.Size = new System.Drawing.Size(75, 23);
+            this.btSetting.TabIndex = 16;
+            this.btSetting.Text = "Setting";
+            this.btSetting.UseVisualStyleBackColor = true;
+            // 
+            // label14
+            // 
+            this.label14.AutoSize = true;
+            this.label14.Location = new System.Drawing.Point(265, 197);
+            this.label14.Name = "label14";
+            this.label14.Size = new System.Drawing.Size(76, 13);
+            this.label14.TabIndex = 20;
+            this.label14.Text = "Employee ID  :";
+            // 
+            // txtEMPID
+            // 
+            this.txtEMPID.Location = new System.Drawing.Point(359, 194);
+            this.txtEMPID.Name = "txtEMPID";
+            this.txtEMPID.Size = new System.Drawing.Size(185, 20);
+            this.txtEMPID.TabIndex = 19;
+            // 
             // label18
             // 
             this.label18.AutoSize = true;
@@ -1326,32 +1353,14 @@
             this.comboBox2.Size = new System.Drawing.Size(19, 21);
             this.comboBox2.TabIndex = 20;
             // 
-            // txtEMPID
+            // cbManualAuto
             // 
-            this.txtEMPID.Location = new System.Drawing.Point(359, 194);
-            this.txtEMPID.Name = "txtEMPID";
-            this.txtEMPID.Size = new System.Drawing.Size(185, 20);
-            this.txtEMPID.TabIndex = 19;
+            this.cbManualAuto.FormattingEnabled = true;
+            this.cbManualAuto.Location = new System.Drawing.Point(53, 303);
+            this.cbManualAuto.Name = "cbManualAuto";
+            this.cbManualAuto.Size = new System.Drawing.Size(121, 21);
+            this.cbManualAuto.TabIndex = 21;
             // 
-            // label14
-            // 
-            this.label14.AutoSize = true;
-            this.label14.Location = new System.Drawing.Point(265, 197);
-            this.label14.Name = "label14";
-            this.label14.Size = new System.Drawing.Size(76, 13);
-            this.label14.TabIndex = 20;
-            this.label14.Text = "Employee ID  :";
-            //
-            // btSetting
-            //
-            this.btSetting.Location = new System.Drawing.Point(564, 35);
-            this.btSetting.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
-            this.btSetting.Name = "btSetting";
-            this.btSetting.Size = new System.Drawing.Size(91, 30);
-            this.btSetting.TabIndex = 21;
-            this.btSetting.Text = "Setting";
-            this.btSetting.UseVisualStyleBackColor = true;
-            //
             // Form2
             // 
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.None;
@@ -1500,5 +1509,6 @@
         private System.Windows.Forms.Label label14;
         private System.Windows.Forms.TextBox txtEMPID;
         private System.Windows.Forms.Button btSetting;
+        private System.Windows.Forms.ComboBox cbManualAuto;
     }
 }

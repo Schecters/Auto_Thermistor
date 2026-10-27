@@ -77,6 +77,10 @@ namespace Themister_Real
         private KeyenceScanner keyenceScanner = null;
         private bool isKeyenceConnecting = false;
 
+        // ---------------- cbManualAuto: Manual = Scanner USB เท่านั้น / Auto = Keyence เท่านั้น + รอ M30 ก่อนส่ง MES ----------------
+        private const ushort PlcM30ReadyAddress = 30;
+        private bool IsAutoMode => string.Equals(cbManualAuto.SelectedItem?.ToString(), "Auto", StringComparison.OrdinalIgnoreCase);
+
         // ---------------- cbPopup ซ่อนไว้ คลิก "Modbus TCP" (label15) 3 ครั้งติดกันเพื่อแสดง ----------------
         private const int PopupUnlockClickCount = 3;
         private static readonly TimeSpan PopupUnlockClickInterval = TimeSpan.FromMilliseconds(1500);
@@ -133,6 +137,9 @@ namespace Themister_Real
         {
             // กำลังกรอก/สแกนรหัสพนักงาน → ให้ตัวอักษรลง txtEMPID ตามปกติ
             if (txtEMPID.Focused) return;
+
+            // โหมด Auto รับบาร์โค้ดจาก Keyence เท่านั้น
+            if (IsAutoMode) return;
 
             TimeSpan elapsed = DateTime.Now - _lastKeystrokeTime;
             _lastKeystrokeTime = DateTime.Now;
@@ -439,6 +446,12 @@ namespace Themister_Real
                     txt.Clear();
                 }
             };
+
+            cbManualAuto.DropDownStyle = ComboBoxStyle.DropDownList;
+            cbManualAuto.Items.Clear();
+            cbManualAuto.Items.AddRange(new object[] { "Manual", "Auto" });
+            cbManualAuto.SelectedIndex = 0;
+            cbManualAuto.SelectedIndexChanged += (s, e) => _barcodeBuffer.Clear();
 
             if (this.Controls.Find("cbMO", true).Length > 0 && this.Controls.Find("cbMO", true)[0] is ComboBox cbMoControl)
             {
@@ -1541,7 +1554,7 @@ namespace Themister_Real
                     {
                         if (isMesMode)
                         {
-                            await SendRoutingUpdateAsync(jsonPayload);
+                            await SendRoutingWhenPlcReadyAsync(jsonPayload, ctsSequence.Token);
                         }
 
                         await TriggerPlcM3030Async();
@@ -1552,7 +1565,7 @@ namespace Themister_Real
                         {
                             if (isMesMode)
                             {
-                                await SendRoutingUpdateAsync(jsonPayload);
+                                await SendRoutingWhenPlcReadyAsync(jsonPayload, ctsSequence.Token);
                             }
 
                             await TriggerPlcM3030Async();
@@ -1571,7 +1584,7 @@ namespace Themister_Real
 
                             if (confirm == DialogResult.OK && isMesMode)
                             {
-                                await SendRoutingUpdateAsync(jsonPayload);
+                                await SendRoutingWhenPlcReadyAsync(jsonPayload, ctsSequence.Token);
                             }
 
                             await TriggerPlcM3030Async();
@@ -2771,7 +2784,12 @@ namespace Themister_Real
             if (!this.IsHandleCreated || this.IsDisposed) return;
 
             // "ERROR" (อ่านไม่ออก) ส่งเข้า Flow เดียวกับ Scanner USB — btPLCStart_Click จะตั้ง FAIL และสั่ง M3030 ปล่อยชิ้นงาน
-            this.BeginInvoke(new Action(async () => await ProcessScannedBarcodeAsync(barcode)));
+            // โหมด Manual รับบาร์โค้ดจาก Scanner USB เท่านั้น — เช็ค cbManualAuto บน UI Thread
+            this.BeginInvoke(new Action(async () =>
+            {
+                if (!IsAutoMode) return;
+                await ProcessScannedBarcodeAsync(barcode);
+            }));
         }
 
         #endregion
@@ -3404,6 +3422,49 @@ namespace Themister_Real
                 {
                     ResizeAllControls(c, scaleX, scaleY, fontScale);
                 }
+            }
+        }
+
+        // โหมด Auto: ทดสอบไปก่อน แต่ต้องรอ PLC ตั้ง M30 = 1 ก่อนส่งผลไป MES (กด Stop เพื่อยกเลิกได้)
+        private async Task<bool> SendRoutingWhenPlcReadyAsync(string jsonPayload, CancellationToken token)
+        {
+            if (IsAutoMode)
+            {
+                UpdateSensorLabel("Waiting M30...", Color.Orange);
+                await WaitForPlcM30Async(token);
+            }
+
+            return await SendRoutingUpdateAsync(jsonPayload);
+        }
+
+        private async Task WaitForPlcM30Async(CancellationToken token)
+        {
+            while (true)
+            {
+                token.ThrowIfCancellationRequested();
+
+                bool isReady = false;
+                if (tcpClient != null && tcpClient.Connected && modbusMaster != null)
+                {
+                    await modbusLock.WaitAsync(token);
+                    try
+                    {
+                        bool[] coil = await modbusMaster.ReadCoilsAsync(currentSlaveId, PlcM30ReadyAddress, 1);
+                        isReady = coil != null && coil.Length > 0 && coil[0];
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"ไม่สามารถอ่าน M30 ได้: {ex.Message}");
+                    }
+                    finally
+                    {
+                        modbusLock.Release();
+                    }
+                }
+
+                if (isReady) return;
+
+                await Task.Delay(100, token);
             }
         }
 
