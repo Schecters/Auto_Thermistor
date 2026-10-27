@@ -77,8 +77,8 @@ namespace Themister_Real
         private KeyenceScanner keyenceScanner = null;
         private bool isKeyenceConnecting = false;
 
-        // ---------------- cbManualAuto: Manual = Scanner USB เท่านั้น / Auto = Keyence เท่านั้น + รอ M30 ก่อนส่ง MES ----------------
-        private const ushort PlcM30ReadyAddress = 30;
+        // ---------------- cbManualAuto: Manual = Scanner USB เท่านั้น / Auto = Keyence เท่านั้น + รอ M3031 ก่อนส่ง MES ----------------
+        private const ushort PlcSendReadyAddress = 3031;
         private bool IsAutoMode => string.Equals(cbManualAuto.SelectedItem?.ToString(), "Auto", StringComparison.OrdinalIgnoreCase);
 
         // ---------------- cbPopup ซ่อนไว้ คลิก "Modbus TCP" (label15) 3 ครั้งติดกันเพื่อแสดง ----------------
@@ -3114,6 +3114,8 @@ namespace Themister_Real
                             {
                                 this.BeginInvoke(new Action(() =>
                                 {
+                                    // โหมด Auto ใช้ M3031 เป็นสัญญาณ "พร้อมส่ง MES" และเริ่มทดสอบจากการสแกน Keyence แทน
+                                    if (IsAutoMode || isSequenceRunning) return;
                                     btPLCStart_Click(this, EventArgs.Empty);
                                 }));
                             }
@@ -3425,19 +3427,19 @@ namespace Themister_Real
             }
         }
 
-        // โหมด Auto: ทดสอบไปก่อน แต่ต้องรอ PLC ตั้ง M30 = 1 ก่อนส่งผลไป MES (กด Stop เพื่อยกเลิกได้)
+        // โหมด Auto: ทดสอบไปก่อน แต่ต้องรอ PLC ตั้ง M3031 = 1 ก่อนส่งผลไป MES (กด Stop เพื่อยกเลิกได้)
         private async Task<bool> SendRoutingWhenPlcReadyAsync(string jsonPayload, CancellationToken token)
         {
             if (IsAutoMode)
             {
-                UpdateSensorLabel("Waiting M30...", Color.Orange);
-                await WaitForPlcM30Async(token);
+                UpdateSensorLabel("Waiting M3031...", Color.Orange);
+                await WaitForPlcSendReadyAsync(token);
             }
 
             return await SendRoutingUpdateAsync(jsonPayload);
         }
 
-        private async Task WaitForPlcM30Async(CancellationToken token)
+        private async Task WaitForPlcSendReadyAsync(CancellationToken token)
         {
             while (true)
             {
@@ -3449,12 +3451,12 @@ namespace Themister_Real
                     await modbusLock.WaitAsync(token);
                     try
                     {
-                        bool[] coil = await modbusMaster.ReadCoilsAsync(currentSlaveId, PlcM30ReadyAddress, 1);
+                        bool[] coil = await modbusMaster.ReadCoilsAsync(currentSlaveId, PlcSendReadyAddress, 1);
                         isReady = coil != null && coil.Length > 0 && coil[0];
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"ไม่สามารถอ่าน M30 ได้: {ex.Message}");
+                        Console.WriteLine($"ไม่สามารถอ่าน M3031 ได้: {ex.Message}");
                     }
                     finally
                     {
