@@ -25,3 +25,4 @@
 - [2026-10-27 — Routing ไม่ผ่าน → สั่ง M3030 ปล่อยชิ้นงาน](changes/2026-10-27_routing-fail-release-m3030.md)
 - [2026-10-27 — แก้บั๊ก: ตรวจพนักงานผ่านแล้ว สแกนชิ้นงานด้วย Scanner USB ไม่ได้](changes/2026-10-27_empid-focus-bug.md)
 - [2026-10-27 — แก้บั๊ก: Station ที่ไม่มีข้อสอบบังคับ ตรวจพนักงานแล้วขึ้น FAIL](changes/2026-10-27_operator-no-exam-pass.md)
+- [2026-10-27 — โหมด Manual: รับบาร์โค้ดจาก Keyence ได้ด้วย](changes/2026-10-27_manual-allow-keyence.md)
