@@ -204,7 +204,12 @@ namespace Themister_Real
             else
             {
                 bool isRoutingPass = await CheckRoutingAndShowWarningAsync(scannedBarcode);
-                if (isRoutingPass && !isSequenceRunning)
+                if (!isRoutingPass)
+                {
+                    // Routing ไม่ผ่าน / MES ล่ม → ไม่ทดสอบ แต่สั่ง M3030 ปล่อยชิ้นงานไม่ให้ค้างบนเครื่อง
+                    await TriggerPlcM3030Async();
+                }
+                else if (!isSequenceRunning)
                 {
                     btPLCStart_Click(this, EventArgs.Empty);
                 }
