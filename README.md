@@ -20,3 +20,4 @@
 - [2026-10-16 — Thermistor: เลือกอุปกรณ์ USB จาก Dropdown + เลิก Popup แจ้งหลุด](changes/2026-10-16_thermistor-usb-dropdown.md)
 - [2026-10-16 — รองรับ Chroma 12061 ผ่าน USB (ยังใช้กับ Picotest ได้)](changes/2026-10-16_chroma-12061-support.md)
 - [2026-10-26 — เปิด Form2 ทันที, ล็อก Line/Station/MO/MES, ตรวจสิทธิ์พนักงานผ่าน API](changes/2026-10-26_open-form2-direct-operator-check.md)
+- [2026-10-27 — โหมด Manual / Auto: เลือกแหล่งสแกน + รอ M30 ก่อนส่ง MES](changes/2026-10-27_manual-auto-scanner-mode.md)
