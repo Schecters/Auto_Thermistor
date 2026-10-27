@@ -23,3 +23,4 @@
 - [2026-10-27 — โหมด Manual / Auto: เลือกแหล่งสแกน + รอ M30 ก่อนส่ง MES](changes/2026-10-27_manual-auto-scanner-mode.md)
 - [2026-10-27 — โหมด Auto: รอ M3031 (แทน M30) ก่อนส่ง API แล้วสั่ง M3030](changes/2026-10-27_auto-wait-m3031.md)
 - [2026-10-27 — Routing ไม่ผ่าน → สั่ง M3030 ปล่อยชิ้นงาน](changes/2026-10-27_routing-fail-release-m3030.md)
+- [2026-10-27 — แก้บั๊ก: ตรวจพนักงานผ่านแล้ว สแกนชิ้นงานด้วย Scanner USB ไม่ได้](changes/2026-10-27_empid-focus-bug.md)
