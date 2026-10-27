@@ -1234,6 +1234,13 @@ namespace Themister_Real
                             txtEMPID.BackColor = Color.FromArgb(220, 252, 231);
                             MessageBox.Show($"พนักงาน {empId} {operatorName}\nผ่านการตรวจสอบ Line {line} / Station {OPERATOR_STATION}\nอนุญาตให้ทำงานได้",
                                             "Operator Check: PASS", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                            // ย้าย Focus ออกจาก txtEMPID ไม่งั้นตัวดัก Scanner USB จะข้าม และบาร์โค้ดชิ้นงานจะถูกพิมพ์ลง txtEMPID
+                            Control[] foundBarcode = this.Controls.Find("txtBarcode", true);
+                            if (foundBarcode.Length > 0 && foundBarcode[0].CanFocus)
+                                foundBarcode[0].Focus();
+                            else
+                                this.ActiveControl = null;
                             return;
                         }
 
