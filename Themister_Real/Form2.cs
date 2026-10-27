@@ -1224,15 +1224,20 @@ namespace Themister_Real
 
                         JsonElement summary = default;
                         bool hasSummary = root.TryGetProperty("summary", out summary) && summary.ValueKind == JsonValueKind.Object;
+                        // Station ที่ไม่มีข้อสอบบังคับ API ไม่ส่ง summary มา → ใช้ status ("pass") ตัดสินแทน
                         bool allPassed = hasSummary
-                            && summary.TryGetProperty("all_passed", out JsonElement allPassedElem)
-                            && allPassedElem.ValueKind == JsonValueKind.True;
+                            ? summary.TryGetProperty("all_passed", out JsonElement allPassedElem) && allPassedElem.ValueKind == JsonValueKind.True
+                            : string.Equals(GetJsonText(root, "status"), "pass", StringComparison.OrdinalIgnoreCase);
+                        // ไม่มี summary → passed_exams / total_exams อยู่ระดับบนสุดของคำตอบ
+                        JsonElement examCount = hasSummary ? summary : root;
+                        string serverMsg = GetJsonText(root, "message");
 
                         if (allPassed)
                         {
                             verifiedOperatorId = empId;
                             txtEMPID.BackColor = Color.FromArgb(220, 252, 231);
-                            MessageBox.Show($"พนักงาน {empId} {operatorName}\nผ่านการตรวจสอบ Line {line} / Station {OPERATOR_STATION}\nอนุญาตให้ทำงานได้",
+                            string passNote = string.IsNullOrEmpty(serverMsg) ? "" : $"\n{serverMsg}";
+                            MessageBox.Show($"พนักงาน {empId} {operatorName}\nผ่านการตรวจสอบ Line {line} / Station {OPERATOR_STATION}\nอนุญาตให้ทำงานได้{passNote}",
                                             "Operator Check: PASS", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
                             // ย้าย Focus ออกจาก txtEMPID ไม่งั้นตัวดัก Scanner USB จะข้าม และบาร์โค้ดชิ้นงานจะถูกพิมพ์ลง txtEMPID
@@ -1260,9 +1265,10 @@ namespace Themister_Real
                         StringBuilder msg = new StringBuilder();
                         msg.AppendLine($"พนักงาน {empId} {operatorName}");
                         msg.AppendLine($"ไม่ผ่านการตรวจสอบ Line {line} / Station {OPERATOR_STATION}");
-                        if (hasSummary)
+                        string totalExams = GetJsonText(examCount, "total_exams");
+                        if (!string.IsNullOrEmpty(totalExams))
                         {
-                            msg.AppendLine($"ผ่าน {GetJsonText(summary, "passed_exams")} จาก {GetJsonText(summary, "total_exams")} หัวข้อ");
+                            msg.AppendLine($"ผ่าน {GetJsonText(examCount, "passed_exams")} จาก {totalExams} หัวข้อ");
                         }
                         msg.AppendLine();
 
@@ -1273,7 +1279,6 @@ namespace Themister_Real
                         }
                         else
                         {
-                            string serverMsg = GetJsonText(root, "message");
                             msg.AppendLine(!string.IsNullOrEmpty(serverMsg) ? serverMsg : "ไม่พบข้อมูลการสอบของพนักงานใน Line / Station นี้");
                         }
 
