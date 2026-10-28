@@ -40,7 +40,20 @@ namespace Themister_Real
         // Lock ป้องกันคำสั่งชนกันบน TCP Stream
         private readonly SemaphoreSlim modbusLock = new SemaphoreSlim(1, 1);
         private readonly string[] cachedMnAddresses = new string[12];
+        // สถานะ M3031 ล่าสุดที่ Thread Polling อ่านได้ (ใช้หาขอบขาขึ้น/ขาลง)
         private bool _prevM3031State = false;
+
+        // ---------------- Flow ชิ้นงาน: สแกน → รอ M3031 → Check Routing → ทดสอบ → ส่ง MES → M3030 ----------------
+        // ทุกตัวแปรด้านล่างใช้บน UI Thread เท่านั้น
+        // SN ที่สแกนแล้ว รอ M3031 = 1 ก่อนเริ่ม Check Routing (null = ยังไม่มี)
+        private string _pendingBarcode = null;
+        // สถานะ M3031 ฝั่ง UI (อัปเดตผ่าน OnM3031Changed)
+        private bool _isM3031On = false;
+        // M3031 รอบ ON นี้ถูกใช้ไปแล้ว — 1 รอบ ON = 1 ชิ้นงาน ต้องรอ M3031 ลงเป็น 0 ก่อนรับชิ้นถัดไป
+        private bool _m3031CycleUsed = false;
+        // กำลัง Check Routing / ทดสอบชิ้นงานที่เริ่มจาก M3031
+        private bool _isProcessingPart = false;
+        private string _processingBarcode = null;
 
         // ---------------- USB SCPI DMM (Picotest M3521A / M3522A, Chroma 12061) ----------------
         private SafeFileHandle usbDeviceHandle = null;
@@ -77,8 +90,10 @@ namespace Themister_Real
         private KeyenceScanner keyenceScanner = null;
         private bool isKeyenceConnecting = false;
 
-        // ---------------- cbManualAuto: Manual = Scanner USB + Keyence / Auto = Keyence เท่านั้น + รอ M3031 ก่อนส่ง MES ----------------
-        private const ushort PlcSendReadyAddress = 3031;
+        // ---------------- cbManualAuto: Manual = Scanner USB + Keyence / Auto = Keyence เท่านั้น ----------------
+        // M3031 = PLC แจ้งว่าชิ้นงานพร้อมที่ Station (สัญญาณเริ่ม Check Routing) / M3030 = สั่ง PLC ดีดชิ้นงานออก
+        private const ushort PlcPartReadyAddress = 3031;
+        private const ushort PlcReleaseAddress = 3030;
         private bool IsAutoMode => string.Equals(cbManualAuto.SelectedItem?.ToString(), "Auto", StringComparison.OrdinalIgnoreCase);
 
         // ---------------- cbPopup ซ่อนไว้ คลิก "Modbus TCP" (label15) 3 ครั้งติดกันเพื่อแสดง ----------------
@@ -183,36 +198,121 @@ namespace Themister_Real
         }
 
         // ใช้ร่วมกันทั้ง Keyboard Wedge Scanner และ Keyence Scanner (LAN)
+        // สแกนแล้วยังไม่ Check Routing — เก็บ SN ไว้รอ M3031 = 1 (ชิ้นงานพร้อมที่ Station) ก่อน
         private async Task ProcessScannedBarcodeAsync(string scannedBarcode)
         {
-            Control[] foundBarcode = this.Controls.Find("txtBarcode", true);
-            if (foundBarcode.Length > 0 && foundBarcode[0] is TextBox txtBarcode)
+            if (string.IsNullOrWhiteSpace(scannedBarcode)) return;
+            scannedBarcode = scannedBarcode.Trim();
+
+            if (_isProcessingPart || isSequenceRunning)
             {
-                txtBarcode.Text = scannedBarcode;
+                // สแกนซ้ำชิ้นที่กำลังทำอยู่ → ไม่สนใจ / ชิ้นอื่น → เก็บไว้รอ M3031 รอบถัดไป
+                if (!string.Equals(scannedBarcode, _processingBarcode, StringComparison.OrdinalIgnoreCase))
+                {
+                    _pendingBarcode = scannedBarcode;
+                }
+                return;
             }
 
-            if (isSequenceRunning) return;
+            SetBarcodeText(scannedBarcode);
+
             if (!EnsureOperatorVerified()) return;
+
+            _pendingBarcode = scannedBarcode;
+            await TryStartPendingPartAsync();
+        }
+
+        // M3031 เปลี่ยนสถานะ (เรียกบน UI Thread จาก RealtimePollingLoopAsync)
+        private async void OnM3031Changed(bool isOn)
+        {
+            _isM3031On = isOn;
+
+            if (!isOn)
+            {
+                // ชิ้นงานเดิมออกไปแล้ว → พร้อมรับชิ้นถัดไป
+                _m3031CycleUsed = false;
+                return;
+            }
+
+            await TryStartPendingPartAsync();
+        }
+
+        // เริ่ม Flow ชิ้นงานเมื่อมีทั้ง SN ที่สแกนแล้ว และ M3031 = 1 (ไม่สนว่าอะไรมาก่อน)
+        private async Task TryStartPendingPartAsync()
+        {
+            if (_isProcessingPart || isSequenceRunning) return;
+
+            if (!_isM3031On || _m3031CycleUsed)
+            {
+                if (_pendingBarcode != null) UpdateSensorLabel("Waiting M3031...", Color.Orange);
+                return;
+            }
+
+            if (_pendingBarcode == null)
+            {
+                UpdateSensorLabel("Waiting Barcode...", Color.Orange);
+                return;
+            }
+
+            string sn = _pendingBarcode;
+            _pendingBarcode = null;
+            _m3031CycleUsed = true;
+            _isProcessingPart = true;
+            _processingBarcode = sn;
+            try
+            {
+                await RunPartFlowAsync(sn);
+            }
+            finally
+            {
+                _isProcessingPart = false;
+                _processingBarcode = null;
+            }
+        }
+
+        // M3031 = 1 แล้ว: Check Routing → ทดสอบ → ส่ง MES → M3030
+        // ทุกทางที่ไม่ได้ทดสอบ (บาร์โค้ด ERROR / Routing ไม่ผ่าน / MES ล่ม) ต้องสั่ง M3030 ดีดชิ้นงานออก
+        private async Task RunPartFlowAsync(string sn)
+        {
+            SetBarcodeText(sn);
+
+            if (!EnsureOperatorVerified())
+            {
+                // คืนรอบ M3031 ให้ — ผ่านการตรวจพนักงานแล้วสแกนใหม่ได้ ชิ้นงานไม่ต้องถูกดีดออก
+                _m3031CycleUsed = false;
+                return;
+            }
+
+            if (string.Equals(sn, "ERROR", StringComparison.OrdinalIgnoreCase))
+            {
+                UpdatePassFailLabel(false);
+                UpdateSensorLabel("Barcode Error", Color.Red);
+                await TriggerPlcM3030Async();
+                return;
+            }
 
             // ตรวจสอบโหมด MES / No MES จาก ComboBox cbMES โดยตรง
             string mesMode = cbMES.SelectedItem?.ToString() ?? "MES";
-
-            if (string.Equals(mesMode, "No MES", StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(mesMode, "No MES", StringComparison.OrdinalIgnoreCase))
             {
-                btPLCStart_Click(this, EventArgs.Empty);
-            }
-            else
-            {
-                bool isRoutingPass = await CheckRoutingAndShowWarningAsync(scannedBarcode);
+                bool isRoutingPass = await CheckRoutingAndShowWarningAsync(sn);
                 if (!isRoutingPass)
                 {
                     // Routing ไม่ผ่าน / MES ล่ม → ไม่ทดสอบ แต่สั่ง M3030 ปล่อยชิ้นงานไม่ให้ค้างบนเครื่อง
                     await TriggerPlcM3030Async();
+                    return;
                 }
-                else if (!isSequenceRunning)
-                {
-                    btPLCStart_Click(this, EventArgs.Empty);
-                }
+            }
+
+            await RunSequenceAsync(sn);
+        }
+
+        private void SetBarcodeText(string barcode)
+        {
+            Control[] foundBarcode = this.Controls.Find("txtBarcode", true);
+            if (foundBarcode.Length > 0 && foundBarcode[0] is TextBox txtBarcode)
+            {
+                txtBarcode.Text = barcode;
             }
         }
 
@@ -456,7 +556,11 @@ namespace Themister_Real
             cbManualAuto.Items.Clear();
             cbManualAuto.Items.AddRange(new object[] { "Manual", "Auto" });
             cbManualAuto.SelectedIndex = 0;
-            cbManualAuto.SelectedIndexChanged += (s, e) => _barcodeBuffer.Clear();
+            cbManualAuto.SelectedIndexChanged += (s, e) =>
+            {
+                _barcodeBuffer.Clear();
+                _pendingBarcode = null;
+            };
 
             if (this.Controls.Find("cbMO", true).Length > 0 && this.Controls.Find("cbMO", true)[0] is ComboBox cbMoControl)
             {
@@ -1424,7 +1528,21 @@ namespace Themister_Real
             }
         }
 
+        // ปุ่ม Start บนหน้าจอ: ทดสอบ SN ใน txtBarcode ทันที (ไม่รอ M3031 / ไม่ Check Routing)
         private async void btPLCStart_Click(object sender, EventArgs e)
+        {
+            if (_isProcessingPart)
+            {
+                MessageBox.Show("ระบบกำลังตรวจ Routing / ทดสอบชิ้นงานอยู่", "แจ้งเตือน", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            await RunSequenceAsync(null);
+        }
+
+        // sn = null → ใช้ค่าใน txtBarcode
+        // ทุกทางที่จบด้วย Popup ไม่ผ่าน/ผิดพลาด สั่ง M3030 ดีดชิ้นงานออก ยกเว้นผู้ใช้กด Stop เอง
+        private async Task RunSequenceAsync(string sn)
         {
             if (isSequenceRunning)
             {
@@ -1442,15 +1560,21 @@ namespace Themister_Real
 
             if (cbStep.SelectedItem == null || !(cbStep.SelectedItem is RecipeComboItem selectedRecipe))
             {
+                UpdateSensorLabel("No Step", Color.Red);
                 MessageBox.Show("กรุณาเลือก Step Sequence ที่ต้องการรันจาก ComboBox", "แจ้งเตือน", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                await TriggerPlcM3030Async();
                 return;
             }
 
-            string currentSn = "";
-            Control[] foundBarcode = this.Controls.Find("txtBarcode", true);
-            if (foundBarcode.Length > 0 && foundBarcode[0] is TextBox txtBarcode)
+            string currentSn = sn;
+            if (currentSn == null)
             {
-                currentSn = txtBarcode.Text.Trim();
+                currentSn = "";
+                Control[] foundBarcode = this.Controls.Find("txtBarcode", true);
+                if (foundBarcode.Length > 0 && foundBarcode[0] is TextBox txtBarcode)
+                {
+                    currentSn = txtBarcode.Text.Trim();
+                }
             }
 
             if (string.Equals(currentSn, "ERROR", StringComparison.OrdinalIgnoreCase))
@@ -1487,6 +1611,7 @@ namespace Themister_Real
                 if (recipe == null || recipe.Steps == null || recipe.Steps.Count == 0)
                 {
                     MessageBox.Show($"ไม่พบข้อมูลขั้นตอนใน Recipe: {selectedRecipe.RecipeName}", "แจ้งเตือน", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    await TriggerPlcM3030Async();
                     return;
                 }
 
@@ -1571,7 +1696,7 @@ namespace Themister_Real
                     {
                         if (isMesMode)
                         {
-                            await SendRoutingWhenPlcReadyAsync(jsonPayload, ctsSequence.Token);
+                            await SendRoutingUpdateAsync(jsonPayload);
                         }
 
                         await TriggerPlcM3030Async();
@@ -1582,7 +1707,7 @@ namespace Themister_Real
                         {
                             if (isMesMode)
                             {
-                                await SendRoutingWhenPlcReadyAsync(jsonPayload, ctsSequence.Token);
+                                await SendRoutingUpdateAsync(jsonPayload);
                             }
 
                             await TriggerPlcM3030Async();
@@ -1590,7 +1715,7 @@ namespace Themister_Real
                         else
                         {
                             string confirmMsg = isMesMode
-                                ? $"ผลการทดสอบ: FAIL (ชิ้นงานไม่ผ่านเกณฑ์)\nSN: {currentSn}\n\nต้องการส่งผล FAIL ไปยังระบบ MES หรือไม่?\n(กด OK เพื่อส่งผล FAIL / กด Cancel เพื่อไม่ส่งและทดสอบใหม่)"
+                                ? $"ผลการทดสอบ: FAIL (ชิ้นงานไม่ผ่านเกณฑ์)\nSN: {currentSn}\n\nต้องการส่งผล FAIL ไปยังระบบ MES หรือไม่?\n(กด OK เพื่อส่งผล FAIL / กด Cancel เพื่อไม่ส่ง — ทั้งสองกรณีจะปล่อยชิ้นงานออก)"
                                 : $"ผลการทดสอบ: FAIL (ชิ้นงานไม่ผ่านเกณฑ์)\nSN: {currentSn}\n\nโหมด No MES: กด OK หรือ Cancel เพื่อยืนยันรับทราบและปล่อยงาน";
 
                             DialogResult confirm = MessageBox.Show(
@@ -1601,7 +1726,7 @@ namespace Themister_Real
 
                             if (confirm == DialogResult.OK && isMesMode)
                             {
-                                await SendRoutingWhenPlcReadyAsync(jsonPayload, ctsSequence.Token);
+                                await SendRoutingUpdateAsync(jsonPayload);
                             }
 
                             await TriggerPlcM3030Async();
@@ -1617,6 +1742,7 @@ namespace Themister_Real
             catch (Exception ex)
             {
                 MessageBox.Show($"เกิดข้อผิดพลาดขณะรัน Step:\n{ex.Message}", "Execution Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                await TriggerPlcM3030Async();
             }
             finally
             {
@@ -2800,7 +2926,7 @@ namespace Themister_Real
         {
             if (!this.IsHandleCreated || this.IsDisposed) return;
 
-            // "ERROR" (อ่านไม่ออก) ส่งเข้า Flow เดียวกับ Scanner USB — btPLCStart_Click จะตั้ง FAIL และสั่ง M3030 ปล่อยชิ้นงาน
+            // "ERROR" (อ่านไม่ออก) ส่งเข้า Flow เดียวกับ Scanner USB — พอ M3031 = 1 จะตั้ง FAIL และสั่ง M3030 ปล่อยชิ้นงาน
             // รับจาก Keyence ได้ทั้งโหมด Manual และ Auto
             this.BeginInvoke(new Action(async () => await ProcessScannedBarcodeAsync(barcode)));
         }
@@ -3110,7 +3236,7 @@ namespace Themister_Real
                     await modbusLock.WaitAsync(token);
                     try
                     {
-                        bool[] m3031Coil = await modbusMaster.ReadCoilsAsync(currentSlaveId, 3031, 1);
+                        bool[] m3031Coil = await modbusMaster.ReadCoilsAsync(currentSlaveId, PlcPartReadyAddress, 1);
                         currentM3031 = m3031Coil != null && m3031Coil.Length > 0 && m3031Coil[0];
                     }
                     catch { }
@@ -3119,23 +3245,12 @@ namespace Themister_Real
                         modbusLock.Release();
                     }
 
-                    if (!_prevM3031State && currentM3031)
+                    // ส่งทั้งขอบขาขึ้น (ชิ้นงานพร้อม → เริ่ม Check Routing) และขาลง (พร้อมรับชิ้นถัดไป) ไป UI Thread
+                    if (currentM3031 != _prevM3031State)
                     {
-                        if (!isSequenceRunning)
-                        {
-                            if (this.IsHandleCreated && !this.IsDisposed)
-                            {
-                                this.BeginInvoke(new Action(() =>
-                                {
-                                    // โหมด Auto ใช้ M3031 เป็นสัญญาณ "พร้อมส่ง MES" และเริ่มทดสอบจากการสแกน Keyence แทน
-                                    if (IsAutoMode || isSequenceRunning) return;
-                                    btPLCStart_Click(this, EventArgs.Empty);
-                                }));
-                            }
-                        }
+                        _prevM3031State = currentM3031;
+                        NotifyM3031Changed(currentM3031);
                     }
-
-                    _prevM3031State = currentM3031;
 
                     string[] currentAddresses = new string[12];
                     Array.Copy(cachedMnAddresses, currentAddresses, 12);
@@ -3221,7 +3336,22 @@ namespace Themister_Real
                 }
             }
 
+            // PLC หลุด → ถือว่า M3031 ลง เพื่อไม่ให้เริ่มชิ้นงานจากสถานะเก่า
+            if (_prevM3031State)
+            {
+                _prevM3031State = false;
+                NotifyM3031Changed(false);
+            }
+
             ResetAllPanelsToGray();
+        }
+
+        private void NotifyM3031Changed(bool isOn)
+        {
+            if (this.IsHandleCreated && !this.IsDisposed)
+            {
+                this.BeginInvoke(new Action(() => OnM3031Changed(isOn)));
+            }
         }
 
         #endregion
@@ -3349,7 +3479,7 @@ namespace Themister_Real
                 await modbusLock.WaitAsync();
                 try
                 {
-                    await modbusMaster.WriteSingleCoilAsync(currentSlaveId, 3030, true);
+                    await modbusMaster.WriteSingleCoilAsync(currentSlaveId, PlcReleaseAddress, true);
                 }
                 catch (Exception ex)
                 {
@@ -3437,49 +3567,6 @@ namespace Themister_Real
                 {
                     ResizeAllControls(c, scaleX, scaleY, fontScale);
                 }
-            }
-        }
-
-        // โหมด Auto: ทดสอบไปก่อน แต่ต้องรอ PLC ตั้ง M3031 = 1 ก่อนส่งผลไป MES (กด Stop เพื่อยกเลิกได้)
-        private async Task<bool> SendRoutingWhenPlcReadyAsync(string jsonPayload, CancellationToken token)
-        {
-            if (IsAutoMode)
-            {
-                UpdateSensorLabel("Waiting M3031...", Color.Orange);
-                await WaitForPlcSendReadyAsync(token);
-            }
-
-            return await SendRoutingUpdateAsync(jsonPayload);
-        }
-
-        private async Task WaitForPlcSendReadyAsync(CancellationToken token)
-        {
-            while (true)
-            {
-                token.ThrowIfCancellationRequested();
-
-                bool isReady = false;
-                if (tcpClient != null && tcpClient.Connected && modbusMaster != null)
-                {
-                    await modbusLock.WaitAsync(token);
-                    try
-                    {
-                        bool[] coil = await modbusMaster.ReadCoilsAsync(currentSlaveId, PlcSendReadyAddress, 1);
-                        isReady = coil != null && coil.Length > 0 && coil[0];
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"ไม่สามารถอ่าน M3031 ได้: {ex.Message}");
-                    }
-                    finally
-                    {
-                        modbusLock.Release();
-                    }
-                }
-
-                if (isReady) return;
-
-                await Task.Delay(100, token);
             }
         }
 
