@@ -3369,6 +3369,38 @@ namespace Themister_Real
             }
         }
 
+        // บันทึกสิ่งที่ส่งไป MES และผลตอบกลับ ลง mes_log.txt (โฟลเดอร์เดียวกับ log.txt)
+        private void SaveMesLog(string url, string requestJson, string responseText)
+        {
+            try
+            {
+                DateTime now = DateTime.Now;
+                string targetDirectory = Path.Combine(
+                    @"D:\",
+                    "Thermistor",
+                    now.ToString("yyyy"),
+                    now.ToString("MM"),
+                    now.ToString("dd")
+                );
+
+                if (!Directory.Exists(targetDirectory))
+                {
+                    Directory.CreateDirectory(targetDirectory);
+                }
+
+                string entry =
+                    $"[{now:yyyy-MM-dd HH:mm:ss.fff}] POST {url}" + Environment.NewLine +
+                    $"REQUEST : {requestJson}" + Environment.NewLine +
+                    $"RESPONSE: {responseText}" + Environment.NewLine + Environment.NewLine;
+
+                File.AppendAllText(Path.Combine(targetDirectory, "mes_log.txt"), entry, Encoding.UTF8);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ไม่สามารถบันทึก MES Log ได้: {ex.Message}");
+            }
+        }
+
         private async Task TriggerPlcM3030Async()
         {
             if (tcpClient != null && tcpClient.Connected && modbusMaster != null)
@@ -3479,6 +3511,7 @@ namespace Themister_Real
                     var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
                     HttpResponseMessage response = await client.PostAsync(url, content);
                     string resContent = await response.Content.ReadAsStringAsync();
+                    SaveMesLog(url, jsonPayload, $"HTTP {(int)response.StatusCode} {resContent}");
 
                     if (response.IsSuccessStatusCode)
                     {
@@ -3494,6 +3527,7 @@ namespace Themister_Real
             }
             catch (Exception ex)
             {
+                SaveMesLog(url, jsonPayload, $"ERROR {ex.GetType().Name}: {ex.Message}");
                 MessageBox.Show($"เกิดข้อผิดพลาดในการส่งข้อมูล Update Route:\n{ex.Message}",
                                 "MES Connection Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return false;

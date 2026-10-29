@@ -46,6 +46,7 @@
 | 10-29 | สแกนแล้ว Check Routing ทันที ไม่รอชิ้นงานพร้อม | Flow เริ่มจากการสแกน | สแกนแค่เก็บ SN → รอ M3031 = 1 แล้วค่อย Check Routing → ทดสอบ (ทั้ง Manual/Auto), เลิกรอ M3031 ก่อนส่ง MES |
 | 10-29 | ไม่ได้เลือก Step / Recipe ว่าง / Error ระหว่างทดสอบ ชิ้นงานค้าง | Popup แล้ว return ไม่สั่ง M3030 | เพิ่ม M3030 ทุกจุดนี้ (แยก `btPLCStart_Click` → `RunSequenceAsync`) |
 | 10-29 | ไม่ต้องการยิง API routing-check ก่อนทดสอบ | — | ลบ `CheckRoutingAndShowWarningAsync`; โหมด MES เหลือแค่ตรวจว่าเลือก Line/Station/MO ครบ (`IsMesSelectionComplete`) ไม่ครบ → Popup + M3030; ยังส่ง routing-update หลังทดสอบเหมือนเดิม |
+| 10-29 | ไม่รู้ว่าส่งอะไรไป MES / MES ตอบอะไร | ไม่มี Log | `SaveMesLog` เขียน `D:\Thermistor\yyyy\MM\dd\mes_log.txt` ทุกครั้งที่ส่ง routing-update (เวลา, URL, Payload, HTTP Status + Response หรือ Exception) |
 
 ## ยังไม่ได้ทำ / ข้อควรรู้
 - PLC ต้องเคลียร์ M3031 เป็น 0 หลังดีดชิ้นงานออก ไม่งั้นโปรแกรมจะไม่รับชิ้นถัดไป
