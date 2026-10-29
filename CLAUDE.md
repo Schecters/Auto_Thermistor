@@ -15,14 +15,14 @@
 สแกน (USB / Keyence) → เก็บ SN ไว้ (_pendingBarcode)       PLC: M3031 = 1 (ชิ้นงานพร้อมที่ Station)
                    └──────────── มีครบทั้งสองอย่าง (อะไรมาก่อนก็ได้) ───────────┘
   → SN = "ERROR"? → FAIL + M3030
-  → (โหมด MES) Check Routing ไม่ผ่าน / MES ล่ม → Popup + M3030
+  → (โหมด MES) ยังไม่เลือก Line / Station / MO → Popup + M3030 (ไม่ยิง routing-check แล้ว)
   → ทดสอบตาม Step → PASS: ส่ง routing-update + M3030 / FAIL: Popup (OK = ส่ง MES, Cancel = ไม่ส่ง) + M3030
   → PLC ดีดชิ้นงานออก → M3031 = 0 → รับชิ้นถัดไป (1 รอบ M3031 ON = 1 ชิ้น)
 ```
-- **M3031** (Coil 3031, `PlcPartReadyAddress`) = PLC แจ้งชิ้นงานพร้อม → สัญญาณเริ่ม Check Routing
+- **M3031** (Coil 3031, `PlcPartReadyAddress`) = PLC แจ้งชิ้นงานพร้อม → สัญญาณเริ่มทดสอบ
 - **M3030** (Coil 3030, `PlcReleaseAddress`) = สั่ง PLC ดีดชิ้นงานออกจาก Station — ต้องส่งทุกครั้งที่ไม่ผ่าน/ผิดพลาด ยกเว้น: ผู้ใช้กด Stop, ยังไม่ผ่านการตรวจพนักงาน, PLC ไม่ได้เชื่อมต่อ
 - โหมด Manual / Auto (`cbManualAuto`) ต่างกันแค่แหล่งสแกน: Manual = USB + Keyence, Auto = Keyence เท่านั้น
-- ปุ่ม Start บนหน้าจอ = ทดสอบ SN ใน `txtBarcode` ทันที (ไม่รอ M3031, ไม่ Check Routing)
+- ปุ่ม Start บนหน้าจอ = ทดสอบ SN ใน `txtBarcode` ทันที (ไม่รอ M3031)
 - ต้องผ่านการตรวจพนักงาน (`txtEMPID` + Enter → API `operator-data`) ก่อนจึงสแกน/Start ได้
 
 ## ปัญหาที่แก้แล้ว
@@ -45,6 +45,7 @@
 | 10-27 | รับบาร์โค้ดทั้งสองแหล่งพร้อมกัน, ส่ง MES ทันทีไม่รอ PLC | — | เพิ่ม `cbManualAuto` เลือกแหล่งสแกน; Auto รอ M30 → เปลี่ยนเป็น M3031 ก่อนส่ง MES; Manual รับ Keyence ได้ด้วย *(ส่วน "รอ M3031 ก่อนส่ง MES" ถูกแทนที่ในรอบ 10-29)* |
 | 10-29 | สแกนแล้ว Check Routing ทันที ไม่รอชิ้นงานพร้อม | Flow เริ่มจากการสแกน | สแกนแค่เก็บ SN → รอ M3031 = 1 แล้วค่อย Check Routing → ทดสอบ (ทั้ง Manual/Auto), เลิกรอ M3031 ก่อนส่ง MES |
 | 10-29 | ไม่ได้เลือก Step / Recipe ว่าง / Error ระหว่างทดสอบ ชิ้นงานค้าง | Popup แล้ว return ไม่สั่ง M3030 | เพิ่ม M3030 ทุกจุดนี้ (แยก `btPLCStart_Click` → `RunSequenceAsync`) |
+| 10-29 | ไม่ต้องการยิง API routing-check ก่อนทดสอบ | — | ลบ `CheckRoutingAndShowWarningAsync`; โหมด MES เหลือแค่ตรวจว่าเลือก Line/Station/MO ครบ (`IsMesSelectionComplete`) ไม่ครบ → Popup + M3030; ยังส่ง routing-update หลังทดสอบเหมือนเดิม |
 
 ## ยังไม่ได้ทำ / ข้อควรรู้
 - PLC ต้องเคลียร์ M3031 เป็น 0 หลังดีดชิ้นงานออก ไม่งั้นโปรแกรมจะไม่รับชิ้นถัดไป

@@ -43,15 +43,15 @@ namespace Themister_Real
         // สถานะ M3031 ล่าสุดที่ Thread Polling อ่านได้ (ใช้หาขอบขาขึ้น/ขาลง)
         private bool _prevM3031State = false;
 
-        // ---------------- Flow ชิ้นงาน: สแกน → รอ M3031 → Check Routing → ทดสอบ → ส่ง MES → M3030 ----------------
+        // ---------------- Flow ชิ้นงาน: สแกน → รอ M3031 → ทดสอบ → ส่ง MES → M3030 ----------------
         // ทุกตัวแปรด้านล่างใช้บน UI Thread เท่านั้น
-        // SN ที่สแกนแล้ว รอ M3031 = 1 ก่อนเริ่ม Check Routing (null = ยังไม่มี)
+        // SN ที่สแกนแล้ว รอ M3031 = 1 ก่อนเริ่มทดสอบ (null = ยังไม่มี)
         private string _pendingBarcode = null;
         // สถานะ M3031 ฝั่ง UI (อัปเดตผ่าน OnM3031Changed)
         private bool _isM3031On = false;
         // M3031 รอบ ON นี้ถูกใช้ไปแล้ว — 1 รอบ ON = 1 ชิ้นงาน ต้องรอ M3031 ลงเป็น 0 ก่อนรับชิ้นถัดไป
         private bool _m3031CycleUsed = false;
-        // กำลัง Check Routing / ทดสอบชิ้นงานที่เริ่มจาก M3031
+        // กำลังทดสอบชิ้นงานที่เริ่มจาก M3031
         private bool _isProcessingPart = false;
         private string _processingBarcode = null;
 
@@ -91,7 +91,7 @@ namespace Themister_Real
         private bool isKeyenceConnecting = false;
 
         // ---------------- cbManualAuto: Manual = Scanner USB + Keyence / Auto = Keyence เท่านั้น ----------------
-        // M3031 = PLC แจ้งว่าชิ้นงานพร้อมที่ Station (สัญญาณเริ่ม Check Routing) / M3030 = สั่ง PLC ดีดชิ้นงานออก
+        // M3031 = PLC แจ้งว่าชิ้นงานพร้อมที่ Station (สัญญาณเริ่มทดสอบ) / M3030 = สั่ง PLC ดีดชิ้นงานออก
         private const ushort PlcPartReadyAddress = 3031;
         private const ushort PlcReleaseAddress = 3030;
         private bool IsAutoMode => string.Equals(cbManualAuto.SelectedItem?.ToString(), "Auto", StringComparison.OrdinalIgnoreCase);
@@ -198,7 +198,7 @@ namespace Themister_Real
         }
 
         // ใช้ร่วมกันทั้ง Keyboard Wedge Scanner และ Keyence Scanner (LAN)
-        // สแกนแล้วยังไม่ Check Routing — เก็บ SN ไว้รอ M3031 = 1 (ชิ้นงานพร้อมที่ Station) ก่อน
+        // สแกนแล้วยังไม่ทดสอบ — เก็บ SN ไว้รอ M3031 = 1 (ชิ้นงานพร้อมที่ Station) ก่อน
         private async Task ProcessScannedBarcodeAsync(string scannedBarcode)
         {
             if (string.IsNullOrWhiteSpace(scannedBarcode)) return;
@@ -270,8 +270,8 @@ namespace Themister_Real
             }
         }
 
-        // M3031 = 1 แล้ว: Check Routing → ทดสอบ → ส่ง MES → M3030
-        // ทุกทางที่ไม่ได้ทดสอบ (บาร์โค้ด ERROR / Routing ไม่ผ่าน / MES ล่ม) ต้องสั่ง M3030 ดีดชิ้นงานออก
+        // M3031 = 1 แล้ว: ทดสอบ → ส่ง MES → M3030
+        // ทุกทางที่ไม่ได้ทดสอบ (บาร์โค้ด ERROR / ยังไม่เลือก Line, Station, MO) ต้องสั่ง M3030 ดีดชิ้นงานออก
         private async Task RunPartFlowAsync(string sn)
         {
             SetBarcodeText(sn);
@@ -293,15 +293,11 @@ namespace Themister_Real
 
             // ตรวจสอบโหมด MES / No MES จาก ComboBox cbMES โดยตรง
             string mesMode = cbMES.SelectedItem?.ToString() ?? "MES";
-            if (!string.Equals(mesMode, "No MES", StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(mesMode, "No MES", StringComparison.OrdinalIgnoreCase) && !IsMesSelectionComplete())
             {
-                bool isRoutingPass = await CheckRoutingAndShowWarningAsync(sn);
-                if (!isRoutingPass)
-                {
-                    // Routing ไม่ผ่าน / MES ล่ม → ไม่ทดสอบ แต่สั่ง M3030 ปล่อยชิ้นงานไม่ให้ค้างบนเครื่อง
-                    await TriggerPlcM3030Async();
-                    return;
-                }
+                // routing-update ต้องใช้ Line / Station / MO → ยังไม่เลือก ไม่ทดสอบ แต่สั่ง M3030 ปล่อยชิ้นงานไม่ให้ค้างบนเครื่อง
+                await TriggerPlcM3030Async();
+                return;
             }
 
             await RunSequenceAsync(sn);
@@ -316,118 +312,19 @@ namespace Themister_Real
             }
         }
 
-        public async Task<bool> CheckRoutingAndShowWarningAsync(string serialNo)
+        // โหมด MES ต้องเลือก Line, Station และ MO ให้ครบก่อน (ใช้ใน routing-update)
+        private bool IsMesSelectionComplete()
         {
-            if (string.IsNullOrWhiteSpace(serialNo)) return false;
-
-            string mo = "";
-            Control[] foundMo = this.Controls.Find("cbMO", true);
-            if (foundMo.Length > 0 && foundMo[0] is ComboBox cbMo)
-            {
-                mo = cbMo.SelectedItem?.ToString() ?? "";
-            }
-
-            string model = "";
-            Control[] foundModel = this.Controls.Find("txtModel", true);
-            if (foundModel.Length > 0 && foundModel[0] is TextBox txtModel)
-            {
-                model = txtModel.Text.Trim();
-            }
-
+            string mo = cbMO.SelectedItem?.ToString() ?? "";
             string line = cbLines.SelectedItem?.ToString() ?? "";
             string station = cbStations.SelectedItem?.ToString() ?? "";
 
-            string section = "";
-            Control[] foundSection = this.Controls.Find("txtSection", true);
-            if (foundSection.Length > 0 && foundSection[0] is TextBox txtSection)
-            {
-                section = txtSection.Text.Trim();
-            }
+            if (!string.IsNullOrEmpty(line) && !string.IsNullOrEmpty(station) && !string.IsNullOrEmpty(mo)) return true;
 
-            string group = "";
-            Control[] foundGroup = this.Controls.Find("txtGroup", true);
-            if (foundGroup.Length > 0 && foundGroup[0] is TextBox txtGroup)
-            {
-                group = txtGroup.Text.Trim();
-            }
-
-            if (string.IsNullOrEmpty(line) || string.IsNullOrEmpty(station) || string.IsNullOrEmpty(mo))
-            {
-                UpdateSensorLabel("No Route", Color.Red);
-
-                MessageBox.Show("กรุณาเลือก Line, Station และ MO ให้เรียบร้อยก่อนทำการสแกนบาร์โค้ด",
-                                "MES Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return false;
-            }
-
-            UpdateSensorLabel("Checking Routing...", Color.Orange);
-
-            var payload = new
-            {
-                sn = serialNo.Trim(),
-                mo = mo,
-                model = model,
-                line = line,
-                section = section,
-                group = group,
-                station = station,
-                testSubProgram = "",
-                testSubVersion = "",
-                testData = ""
-            };
-
-            string url = $"{API_MES_BASE_URL}/tdc/routing-check";
-
-            try
-            {
-                using (HttpClient client = new HttpClient())
-                {
-                    client.Timeout = TimeSpan.FromSeconds(10);
-                    string jsonBody = JsonSerializer.Serialize(payload);
-                    var content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
-
-                    HttpResponseMessage response = await client.PostAsync(url, content);
-                    string resContent = await response.Content.ReadAsStringAsync();
-
-                    if (response.IsSuccessStatusCode)
-                    {
-                        using (JsonDocument doc = JsonDocument.Parse(resContent))
-                        {
-                            string result = doc.RootElement.TryGetProperty("result", out JsonElement rElem) ? rElem.GetString() : "";
-                            string desc = doc.RootElement.TryGetProperty("description", out JsonElement dElem) ? dElem.GetString() : "N/A";
-
-                            if (result.Equals("OK", StringComparison.OrdinalIgnoreCase))
-                            {
-                                return true;
-                            }
-                            else
-                            {
-                                UpdateSensorLabel("No Route", Color.Red);
-
-                                MessageBox.Show($"ชิ้นงานไม่ผ่านเงื่อนไข Routing:\nSN: {serialNo}\nResult: {result}\nDescription: {desc}",
-                                                "MES Routing Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                                return false;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        UpdateSensorLabel("No Route", Color.Red);
-
-                        MessageBox.Show($"เซิร์ฟเวอร์แจ้งข้อผิดพลาด (HTTP {(int)response.StatusCode}):\n{resContent}",
-                                        "MES Connection Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                        return false;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                UpdateSensorLabel("No Route", Color.Red);
-
-                MessageBox.Show($"ไม่สามารถเชื่อมต่อไปยัง MES Server เพื่อตรวจ Routing ได้:\n{ex.Message}",
-                                "MES Connection Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return false;
-            }
+            UpdateSensorLabel("No Line / Station / MO", Color.Red);
+            MessageBox.Show("กรุณาเลือก Line, Station และ MO ให้เรียบร้อยก่อนทำการสแกนบาร์โค้ด",
+                            "MES Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
         }
 
         private string BuildUpdateRouteJson(string currentSn, bool isPass)
@@ -1528,7 +1425,7 @@ namespace Themister_Real
             }
         }
 
-        // ปุ่ม Start บนหน้าจอ: ทดสอบ SN ใน txtBarcode ทันที (ไม่รอ M3031 / ไม่ Check Routing)
+        // ปุ่ม Start บนหน้าจอ: ทดสอบ SN ใน txtBarcode ทันที (ไม่รอ M3031)
         private async void btPLCStart_Click(object sender, EventArgs e)
         {
             if (_isProcessingPart)
@@ -3245,7 +3142,7 @@ namespace Themister_Real
                         modbusLock.Release();
                     }
 
-                    // ส่งทั้งขอบขาขึ้น (ชิ้นงานพร้อม → เริ่ม Check Routing) และขาลง (พร้อมรับชิ้นถัดไป) ไป UI Thread
+                    // ส่งทั้งขอบขาขึ้น (ชิ้นงานพร้อม → เริ่มทดสอบ) และขาลง (พร้อมรับชิ้นถัดไป) ไป UI Thread
                     if (currentM3031 != _prevM3031State)
                     {
                         _prevM3031State = currentM3031;
