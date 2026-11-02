@@ -3519,8 +3519,9 @@ namespace Themister_Real
                     }
                     else
                     {
-                        MessageBox.Show($"Update Route ล้มเหลว (HTTP {(int)response.StatusCode}):\n{resContent}",
-                                        "MES Update Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        // ไม่เด้ง Popup — Modal ทำให้ Flow ค้าง (ยังไม่สั่ง M3030) และบาร์โค้ดที่สแกนระหว่างนั้นเลื่อนไม่ตรงชิ้นงาน
+                        // รายละเอียดอยู่ใน mes_log.txt
+                        UpdateSensorLabel($"MES Send Failed (HTTP {(int)response.StatusCode})", Color.Red);
                         return false;
                     }
                 }
@@ -3528,8 +3529,7 @@ namespace Themister_Real
             catch (Exception ex)
             {
                 SaveMesLog(url, jsonPayload, $"ERROR {ex.GetType().Name}: {ex.Message}");
-                MessageBox.Show($"เกิดข้อผิดพลาดในการส่งข้อมูล Update Route:\n{ex.Message}",
-                                "MES Connection Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                UpdateSensorLabel("MES Send Failed", Color.Red);
                 return false;
             }
         }

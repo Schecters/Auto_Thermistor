@@ -47,10 +47,12 @@
 | 10-29 | ไม่ได้เลือก Step / Recipe ว่าง / Error ระหว่างทดสอบ ชิ้นงานค้าง | Popup แล้ว return ไม่สั่ง M3030 | เพิ่ม M3030 ทุกจุดนี้ (แยก `btPLCStart_Click` → `RunSequenceAsync`) |
 | 10-29 | ไม่ต้องการยิง API routing-check ก่อนทดสอบ | — | ลบ `CheckRoutingAndShowWarningAsync`; โหมด MES เหลือแค่ตรวจว่าเลือก Line/Station/MO ครบ (`IsMesSelectionComplete`) ไม่ครบ → Popup + M3030; ยังส่ง routing-update หลังทดสอบเหมือนเดิม |
 | 10-29 | ไม่รู้ว่าส่งอะไรไป MES / MES ตอบอะไร | ไม่มี Log | `SaveMesLog` เขียน `D:\Thermistor\yyyy\MM\dd\mes_log.txt` ทุกครั้งที่ส่ง routing-update (เวลา, URL, Payload, HTTP Status + Response หรือ Exception) |
+| 11-02 | SN ที่ส่ง MES ไม่ตรงกับที่สแกน เมื่อส่ง MES ไม่สำเร็จ | Popup "MES Update/Connection Error" เป็น Modal → Flow ค้าง ไม่สั่ง M3030, บาร์โค้ด/M3031 ระหว่างนั้นเลื่อน, Enter ของ USB Scanner กด OK | ลบ Popup ใน `SendRoutingUpdateAsync` → ป้ายสถานะ "MES Send Failed" + `mes_log.txt` แทน (Popup "Test Result: FAIL" คงไว้) |
 
 ## ยังไม่ได้ทำ / ข้อควรรู้
 - PLC ต้องเคลียร์ M3031 เป็น 0 หลังดีดชิ้นงานออก ไม่งั้นโปรแกรมจะไม่รับชิ้นถัดไป
 - Flow M3031 → M3030 แบบใหม่ (10-29) Build ผ่านแล้ว แต่ยังไม่ได้ทดสอบกับ PLC จริง
+- Popup "Test Result: FAIL" ยังเป็น Modal — ถ้าสแกนด้วย USB ตอน Popup เปิด Enter ของ Scanner จะกด OK (ส่ง FAIL ไป MES) และบาร์โค้ดนั้นหาย
 - ข้อเสนอค้างจาก 10-15:
   - ใช้ `HttpClient` ตัวเดียวร่วมกัน
   - ใส่ Log ใน `catch { }` เงียบหลายจุด
