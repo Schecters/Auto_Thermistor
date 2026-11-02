@@ -29,3 +29,4 @@
 - [2026-10-29 — สแกนแล้วรอ M3031 ก่อน Check Routing + สั่ง M3030 ทุกกรณีที่ไม่ผ่าน](changes/2026-10-29_m3031-triggers-routing-check.md)
 - [2026-10-29 — เลิกยิง API routing-check ก่อนทดสอบ](changes/2026-10-29_remove-routing-check.md)
 - [2026-10-29 — เขียน Log สิ่งที่ส่งไป MES แยกไฟล์ (mes_log.txt)](changes/2026-10-29_mes-send-log.md)
+- [2026-11-02 — ส่ง MES ไม่สำเร็จ ไม่ต้องมี Popup (Popup FAIL คงไว้)](changes/2026-11-02_mes-error-no-popup.md)
