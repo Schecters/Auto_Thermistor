@@ -144,6 +144,7 @@ namespace Themister_Real
             this.FormClosed += Form2_FormClosed;
             InitControls();
             ApplyTheme();
+            InitShiftCounter();
         }
 
         #region Barcode Scanner Trap Logic & Routing Check (Global ReadOnly Interceptor)
@@ -821,6 +822,44 @@ namespace Themister_Real
                 SizeF titleSize = g.MeasureString("Thermistor Test Station", title);
                 g.DrawString("Thermistor Test Station", title, subtle, dividerX + h * 0.25f, (h - titleSize.Height) / 2f);
             }
+
+            DrawShiftCount(g, header);
+        }
+
+        // ตัวนับ OK / NG ของกะปัจจุบัน วาดกลางแถบหัว: "DAY SHIFT 07:40–19:10   OK 120   NG 3"
+        private void DrawShiftCount(Graphics g, Panel header)
+        {
+            int h = header.Height;
+            string shiftText = _shiftIsDay ? "DAY SHIFT 07:40–19:10" : "NIGHT SHIFT 19:40–07:10";
+
+            using (var label = new Font(ThemeFontName, h * 0.28f, FontStyle.Regular, GraphicsUnit.Pixel))
+            using (var number = new Font(ThemeFontName, h * 0.40f, FontStyle.Bold, GraphicsUnit.Pixel))
+            {
+                var parts = new (string Text, Font Font, Color Color)[]
+                {
+                    (shiftText, label, Color.FromArgb(190, 210, 235)),
+                    ("     OK ", label, Color.White),
+                    (_shiftOkCount.ToString(), number, Color.FromArgb(74, 222, 128)),
+                    ("     NG ", label, Color.White),
+                    (_shiftNgCount.ToString(), number, Color.FromArgb(248, 113, 113)),
+                };
+
+                const TextFormatFlags flags = TextFormatFlags.NoPadding | TextFormatFlags.SingleLine;
+                int total = 0;
+                foreach (var p in parts) total += TextRenderer.MeasureText(g, p.Text, p.Font, Size.Empty, flags).Width;
+
+                // ชิดขอบล่างร่วมกัน ให้ข้อความเล็กกับตัวเลขใหญ่อยู่บรรทัดเดียวกัน
+                int numberHeight = TextRenderer.MeasureText(g, "0", number, Size.Empty, flags).Height;
+                int bottom = (h + numberHeight) / 2;
+
+                int x = (header.Width - total) / 2;
+                foreach (var p in parts)
+                {
+                    Size size = TextRenderer.MeasureText(g, p.Text, p.Font, Size.Empty, flags);
+                    TextRenderer.DrawText(g, p.Text, p.Font, new Point(x, bottom - size.Height), p.Color, flags);
+                    x += size.Width;
+                }
+            }
         }
 
         // ไฟสถานะวงกลม: สีจริงอยู่ที่ BackColor ของ Panel (UpdatePlcStatusIndicator / UpdateDmmStatusIndicator เป็นคนตั้ง)
@@ -883,6 +922,94 @@ namespace Themister_Real
                 TextRenderer.DrawText(e.Graphics, tc.TabPages[e.Index].Text, font, r,
                     selected ? Color.White : ThemeText,
                     TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
+            }
+        }
+
+        #endregion
+
+        #region Shift OK / NG Counter
+
+        // กะเช้า 07:40–19:10, กะดึก 19:40–07:10 — ช่วงพักนับรวมกะที่เพิ่งจบ เส้นแบ่งกะจึงเป็น 07:40 และ 19:40
+        private static readonly TimeSpan DayShiftStart = new TimeSpan(7, 40, 0);
+        private static readonly TimeSpan NightShiftStart = new TimeSpan(19, 40, 0);
+
+        private readonly string shiftCountFilePath = Path.Combine(Application.StartupPath, "shift_count.cfg");
+        private readonly System.Windows.Forms.Timer shiftTimer = new System.Windows.Forms.Timer { Interval = 30000 };
+        private string _shiftKey;
+        private bool _shiftIsDay;
+        private int _shiftOkCount;
+        private int _shiftNgCount;
+
+        // รหัสกะ "yyyy-MM-dd|D" / "yyyy-MM-dd|N" — ก่อน 07:40 เป็นกะดึกของเมื่อวาน
+        private static string GetShiftKey(DateTime now, out bool isDay)
+        {
+            TimeSpan t = now.TimeOfDay;
+            isDay = t >= DayShiftStart && t < NightShiftStart;
+            DateTime shiftDate = t < DayShiftStart ? now.Date.AddDays(-1) : now.Date;
+            return $"{shiftDate:yyyy-MM-dd}|{(isDay ? "D" : "N")}";
+        }
+
+        private void InitShiftCounter()
+        {
+            _shiftKey = GetShiftKey(DateTime.Now, out _shiftIsDay);
+            _shiftOkCount = 0;
+            _shiftNgCount = 0;
+
+            // รูปแบบไฟล์: yyyy-MM-dd|D|OK|NG — เปิดโปรแกรมใหม่ในกะเดิมให้นับต่อ
+            try
+            {
+                if (File.Exists(shiftCountFilePath))
+                {
+                    string[] parts = File.ReadAllText(shiftCountFilePath).Trim().Split('|');
+                    if (parts.Length == 4 && $"{parts[0]}|{parts[1]}" == _shiftKey)
+                    {
+                        int.TryParse(parts[2], out _shiftOkCount);
+                        int.TryParse(parts[3], out _shiftNgCount);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ไม่สามารถอ่าน {shiftCountFilePath}: {ex.Message}");
+            }
+
+            shiftTimer.Tick += (s, e) => CheckShiftRollover();
+            shiftTimer.Start();
+            pnHeader?.Invalidate();
+        }
+
+        // ข้ามกะแล้วเริ่มนับ 0 ใหม่
+        private void CheckShiftRollover()
+        {
+            string key = GetShiftKey(DateTime.Now, out bool isDay);
+            if (key == _shiftKey) return;
+
+            _shiftKey = key;
+            _shiftIsDay = isDay;
+            _shiftOkCount = 0;
+            _shiftNgCount = 0;
+            SaveShiftCount();
+            pnHeader?.Invalidate();
+        }
+
+        private void AddShiftCount(bool isPass)
+        {
+            CheckShiftRollover();
+            if (isPass) _shiftOkCount++;
+            else _shiftNgCount++;
+            SaveShiftCount();
+            pnHeader?.Invalidate();
+        }
+
+        private void SaveShiftCount()
+        {
+            try
+            {
+                File.WriteAllText(shiftCountFilePath, $"{_shiftKey}|{_shiftOkCount}|{_shiftNgCount}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ไม่สามารถบันทึก {shiftCountFilePath}: {ex.Message}");
             }
         }
 
@@ -1784,7 +1911,7 @@ namespace Themister_Real
                     {
                         if (isMesMode)
                         {
-                            await SendRoutingUpdateAsync(jsonPayload);
+                            await SendRoutingUpdateAsync(jsonPayload, overallPass);
                         }
 
                         await TriggerPlcM3030Async();
@@ -1795,7 +1922,7 @@ namespace Themister_Real
                         {
                             if (isMesMode)
                             {
-                                await SendRoutingUpdateAsync(jsonPayload);
+                                await SendRoutingUpdateAsync(jsonPayload, overallPass);
                             }
 
                             await TriggerPlcM3030Async();
@@ -1814,7 +1941,7 @@ namespace Themister_Real
 
                             if (confirm == DialogResult.OK && isMesMode)
                             {
-                                await SendRoutingUpdateAsync(jsonPayload);
+                                await SendRoutingUpdateAsync(jsonPayload, overallPass);
                             }
 
                             await TriggerPlcM3030Async();
@@ -3690,7 +3817,8 @@ namespace Themister_Real
             }
         }
 
-        private async Task<bool> SendRoutingUpdateAsync(string jsonPayload)
+        // isPass ใช้นับ OK / NG ของกะ (นับเฉพาะเมื่อ MES ตอบรับสำเร็จ)
+        private async Task<bool> SendRoutingUpdateAsync(string jsonPayload, bool isPass)
         {
             string url = $"{API_MES_BASE_URL}/tdc/typed/routing-update";
 
@@ -3706,6 +3834,7 @@ namespace Themister_Real
 
                     if (response.IsSuccessStatusCode)
                     {
+                        AddShiftCount(isPass);
                         return true;
                     }
                     else

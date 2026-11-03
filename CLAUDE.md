@@ -49,6 +49,7 @@
 | 10-29 | ไม่รู้ว่าส่งอะไรไป MES / MES ตอบอะไร | ไม่มี Log | `SaveMesLog` เขียน `D:\Thermistor\yyyy\MM\dd\mes_log.txt` ทุกครั้งที่ส่ง routing-update (เวลา, URL, Payload, HTTP Status + Response หรือ Exception) |
 | 11-02 | SN ที่ส่ง MES ไม่ตรงกับที่สแกน เมื่อส่ง MES ไม่สำเร็จ | Popup "MES Update/Connection Error" เป็น Modal → Flow ค้าง ไม่สั่ง M3030, บาร์โค้ด/M3031 ระหว่างนั้นเลื่อน, Enter ของ USB Scanner กด OK | ลบ Popup ใน `SendRoutingUpdateAsync` → ป้ายสถานะ "MES Send Failed" + `mes_log.txt` แทน (Popup "Test Result: FAIL" คงไว้) |
 | 11-03 | UI ดูเก่า, Tab ซ้อนกัน, ไฟสถานะไม่มีสีตอนเปิดโปรแกรม | ใช้สไตล์ระบบ WinForms | ธีม Delta (Blue `#005EB8` / Navy `#002D5A`) ใน `ApplyTheme()`: แถบหัว `pnHeader` (สร้างตอน Runtime) + ย้ายไฟสถานะ PLC/Thermistor ขึ้นไป (วงกลม, เริ่มเป็นแดง), GroupBox วาดเป็นการ์ด, Tab แบบ OwnerDraw |
+| 11-03 | ไม่รู้ยอด OK/NG ต่อกะ | — | นับเมื่อ routing-update สำเร็จ (HTTP 2xx) แสดงกลางแถบหัว, กะเช้า 07:40–19:10 / กะดึก 19:40–07:10 (ช่วงพักนับเข้ากะที่เพิ่งจบ), เก็บใน `shift_count.cfg` (`yyyy-MM-dd\|D/N\|OK\|NG`), ข้ามกะเริ่ม 0 |
 
 ## ยังไม่ได้ทำ / ข้อควรรู้
 - PLC ต้องเคลียร์ M3031 เป็น 0 หลังดีดชิ้นงานออก ไม่งั้นโปรแกรมจะไม่รับชิ้นถัดไป
