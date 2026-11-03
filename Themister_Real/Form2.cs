@@ -556,44 +556,63 @@ namespace Themister_Real
 
         #region UI Theme
 
-        // โทนสีหลักของหน้าจอ (ไฟสถานะ PLC/MN ยังใช้ LimeGreen/Crimson เดิม)
-        private static readonly Color ThemeBackground = Color.FromArgb(243, 244, 246);
+        // โทนสี Delta Electronics (ไฟสถานะ PLC/MN ยังใช้ LimeGreen/Crimson เดิม)
+        private static readonly Color ThemeBackground = Color.FromArgb(238, 242, 247);
         private static readonly Color ThemeCard = Color.White;
-        private static readonly Color ThemeText = Color.FromArgb(31, 41, 55);
-        private static readonly Color ThemeHeader = Color.FromArgb(30, 58, 138);
-        private static readonly Color ThemePrimary = Color.FromArgb(37, 99, 235);
+        private static readonly Color ThemeBorder = Color.FromArgb(216, 222, 230);
+        private static readonly Color ThemeText = Color.FromArgb(30, 41, 59);
+        private static readonly Color ThemeMutedText = Color.FromArgb(71, 85, 105);
+        private static readonly Color ThemeHeader = Color.FromArgb(0, 45, 90);        // Delta Navy
+        private static readonly Color ThemePrimary = Color.FromArgb(0, 94, 184);      // Delta Blue
         private static readonly Color ThemeSuccess = Color.FromArgb(22, 163, 74);
         private static readonly Color ThemeDanger = Color.FromArgb(220, 38, 38);
-        private static readonly Color ThemeNeutral = Color.FromArgb(107, 114, 128);
+        private static readonly Color ThemeNeutral = Color.FromArgb(100, 116, 139);
         private static readonly Color ThemeWarning = Color.FromArgb(217, 119, 6);
-        private static readonly Color ThemeGridLine = Color.FromArgb(229, 231, 235);
+        private static readonly Color ThemeGridLine = Color.FromArgb(226, 232, 240);
+        private static readonly Color ThemeInputReadOnly = Color.FromArgb(243, 246, 250);
+        private static readonly Color ThemeTabIdle = Color.FromArgb(226, 233, 242);
         private const string ThemeFontName = "Segoe UI";
+
+        // ขนาด ClientSize ที่ใช้เป็นฐานของระบบ Resize (ดู Form2_Load)
+        private const int ThemeDesignWidth = 1590;
+        private const int ThemeHeaderHeight = 48;
+
+        private Panel pnHeader;
 
         // ต้องเรียกก่อน RecordInitialControlStates() เพื่อให้ระบบ Resize จำฟอนต์ใหม่เป็นค่าตั้งต้น
         private void ApplyTheme()
         {
+            this.Text = "Thermistor Test Station — DELTA";
             this.BackColor = ThemeBackground;
             ApplyThemeToChildren(this);
+            BuildHeaderBar();
 
             if (dgvSensorResults != null)
             {
-                dgvSensorResults.BackgroundColor = ThemeCard;
+                // พื้นที่ว่างใต้แถวสีอ่อนกว่าการ์ดเล็กน้อย ให้เห็นขอบเขตตารางโดยไม่ต้องมีเส้นขอบ
+                dgvSensorResults.BackgroundColor = ThemeBackground;
                 dgvSensorResults.BorderStyle = BorderStyle.None;
                 dgvSensorResults.GridColor = ThemeGridLine;
                 dgvSensorResults.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
                 dgvSensorResults.EnableHeadersVisualStyles = false;
                 dgvSensorResults.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
                 dgvSensorResults.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
-                dgvSensorResults.ColumnHeadersHeight = 32;
+                dgvSensorResults.ColumnHeadersHeight = 36;
                 dgvSensorResults.ColumnHeadersDefaultCellStyle.BackColor = ThemeHeader;
                 dgvSensorResults.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
                 dgvSensorResults.ColumnHeadersDefaultCellStyle.SelectionBackColor = ThemeHeader;
+                dgvSensorResults.ColumnHeadersDefaultCellStyle.Font = new Font(ThemeFontName, dgvSensorResults.Font.Size, FontStyle.Bold);
                 dgvSensorResults.ColumnHeadersDefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
                 dgvSensorResults.DefaultCellStyle.ForeColor = ThemeText;
-                dgvSensorResults.DefaultCellStyle.SelectionBackColor = Color.FromArgb(219, 234, 254);
+                dgvSensorResults.DefaultCellStyle.SelectionBackColor = Color.FromArgb(214, 232, 250);
                 dgvSensorResults.DefaultCellStyle.SelectionForeColor = ThemeText;
                 dgvSensorResults.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
-                dgvSensorResults.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(249, 250, 251);
+                dgvSensorResults.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(247, 250, 253);
+            }
+
+            if (lbSensorValue != null)
+            {
+                lbSensorValue.Font = new Font(ThemeFontName, lbSensorValue.Font.Size, FontStyle.Bold);
             }
 
             if (lbPassFail != null)
@@ -654,6 +673,15 @@ namespace Themister_Real
                     gb.BackColor = ThemeCard;
                     gb.ForeColor = ThemeHeader;
                     gb.Font = new Font(ThemeFontName, gb.Font.Size, FontStyle.Bold);
+                    gb.Paint += GroupBoxCard_Paint;
+                    gb.SizeChanged += (s, e) => ((Control)s).Invalidate();
+                }
+                else if (c is TabControl tc)
+                {
+                    tc.DrawMode = TabDrawMode.OwnerDrawFixed;
+                    tc.SizeMode = TabSizeMode.Fixed;
+                    tc.ItemSize = new Size(120, 30);
+                    tc.DrawItem += TabControl_DrawItem;
                 }
                 else if (c is TabPage tp)
                 {
@@ -664,9 +692,20 @@ namespace Themister_Real
                 {
                     StyleButton(btn, GetButtonColor(btn.Name));
                 }
-                else if (c is Label || c is TextBox || c is ComboBox)
+                else if (c is TextBox tb)
                 {
-                    if (c.Name != "lbPassFail") c.ForeColor = ThemeText;
+                    tb.ForeColor = ThemeText;
+                    // ช่อง SN ยังพื้นขาวให้เด่น แม้เป็น ReadOnly
+                    tb.BackColor = tb.ReadOnly && tb.Name != "txtBarcode" ? ThemeInputReadOnly : ThemeCard;
+                }
+                else if (c is ComboBox cb)
+                {
+                    cb.ForeColor = ThemeText;
+                }
+                else if (c is Label lbl && lbl.Name != "lbPassFail")
+                {
+                    // ป้ายชื่อช่อง ("Line :", "SN :" ...) สีรอง ให้ค่าในช่องเด่นกว่า
+                    lbl.ForeColor = lbl.Text.TrimEnd().EndsWith(":") ? ThemeMutedText : ThemeText;
                 }
 
                 if (c.HasChildren)
@@ -693,6 +732,158 @@ namespace Themister_Real
             btn.ForeColor = Color.White;
             btn.Font = new Font(ThemeFontName, btn.Font.Size, FontStyle.Bold);
             btn.Cursor = Cursors.Hand;
+        }
+
+        // แถบหัวโปรแกรม: โลโก้ DELTA + ชื่อ Station (วาดใน Paint) และไฟสถานะ PLC / Thermistor ด้านขวา
+        private void BuildHeaderBar()
+        {
+            pnHeader = new Panel
+            {
+                Name = "pnHeader",
+                Dock = DockStyle.Top,
+                Height = ThemeHeaderHeight,
+                BackColor = ThemeHeader
+            };
+            pnHeader.Paint += HeaderBar_Paint;
+            pnHeader.SizeChanged += (s, e) => pnHeader.Invalidate();
+            this.Controls.Add(pnHeader);
+
+            // ย้ายป้าย / ไฟสถานะเดิมขึ้นแถบหัว (ชื่อ Control เดิม ใช้ Controls.Find ได้เหมือนเดิม) เรียงจากขวาไปซ้าย
+            const int dot = 16;
+            const int gapAfterLabel = 6;
+            const int gapBetweenGroups = 28;
+            int x = ThemeDesignWidth - 24;
+
+            foreach (var pair in new[] { (label17, pnThermistorConnection), (label16, pnPLCConnection) })
+            {
+                Label lbl = pair.Item1;
+                Panel indicator = pair.Item2;
+                if (lbl == null || indicator == null) continue;
+
+                indicator.BackColor = Color.Crimson; // ต่อสำเร็จแล้วค่อยเปลี่ยนเป็นเขียว
+                indicator.Size = new Size(dot, dot);
+                x -= dot;
+                indicator.Location = new Point(x, (ThemeHeaderHeight - dot) / 2);
+                indicator.Paint += StatusDot_Paint;
+                pnHeader.Controls.Add(indicator);
+
+                lbl.Text = lbl.Text.Replace(":", "").Trim();
+                lbl.AutoSize = true;
+                lbl.ForeColor = Color.White;
+                lbl.Font = new Font(ThemeFontName, 10f, FontStyle.Bold);
+                x -= gapAfterLabel + lbl.PreferredWidth;
+                lbl.Location = new Point(x, (ThemeHeaderHeight - lbl.PreferredHeight) / 2);
+                pnHeader.Controls.Add(lbl);
+
+                x -= gapBetweenGroups;
+            }
+        }
+
+        private void HeaderBar_Paint(object sender, PaintEventArgs e)
+        {
+            Panel header = (Panel)sender;
+            Graphics g = e.Graphics;
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+
+            int h = header.Height;
+            float logo = h * 0.5f;
+            float left = h * 0.4f;
+            float top = (h - logo) / 2f;
+
+            // โลโก้สามเหลี่ยม (Delta)
+            PointF[] triangle =
+            {
+                new PointF(left, top + logo),
+                new PointF(left + logo / 2f, top),
+                new PointF(left + logo, top + logo)
+            };
+            using (var fill = new SolidBrush(ThemePrimary))
+            using (var outline = new Pen(Color.White, Math.Max(2f, h * 0.05f)))
+            {
+                g.FillPolygon(fill, triangle);
+                g.DrawPolygon(outline, triangle);
+            }
+
+            float textX = left + logo + h * 0.25f;
+            using (var brand = new Font(ThemeFontName, h * 0.40f, FontStyle.Bold, GraphicsUnit.Pixel))
+            using (var title = new Font(ThemeFontName, h * 0.32f, FontStyle.Regular, GraphicsUnit.Pixel))
+            using (var white = new SolidBrush(Color.White))
+            using (var subtle = new SolidBrush(Color.FromArgb(190, 210, 235)))
+            using (var divider = new Pen(Color.FromArgb(90, 255, 255, 255), 1f))
+            {
+                SizeF brandSize = g.MeasureString("DELTA", brand);
+                g.DrawString("DELTA", brand, white, textX, (h - brandSize.Height) / 2f);
+
+                float dividerX = textX + brandSize.Width + h * 0.2f;
+                g.DrawLine(divider, dividerX, h * 0.28f, dividerX, h * 0.72f);
+
+                SizeF titleSize = g.MeasureString("Thermistor Test Station", title);
+                g.DrawString("Thermistor Test Station", title, subtle, dividerX + h * 0.25f, (h - titleSize.Height) / 2f);
+            }
+        }
+
+        // ไฟสถานะวงกลม: สีจริงอยู่ที่ BackColor ของ Panel (UpdatePlcStatusIndicator / UpdateDmmStatusIndicator เป็นคนตั้ง)
+        private void StatusDot_Paint(object sender, PaintEventArgs e)
+        {
+            Panel pn = (Panel)sender;
+            Graphics g = e.Graphics;
+            g.Clear(pn.Parent?.BackColor ?? ThemeHeader);
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+
+            int side = Math.Min(pn.ClientSize.Width, pn.ClientSize.Height) - 2;
+            if (side <= 0) return;
+            var rect = new Rectangle((pn.ClientSize.Width - side) / 2, (pn.ClientSize.Height - side) / 2, side, side);
+            using (var fill = new SolidBrush(pn.BackColor))
+            using (var ring = new Pen(Color.FromArgb(200, 255, 255, 255), 1.5f))
+            {
+                g.FillEllipse(fill, rect);
+                g.DrawEllipse(ring, rect);
+            }
+        }
+
+        // GroupBox แบบการ์ด: พื้นขาว ขอบบาง หัวข้อสี Navy + ขีดเน้น Delta Blue
+        private void GroupBoxCard_Paint(object sender, PaintEventArgs e)
+        {
+            GroupBox gb = (GroupBox)sender;
+            Graphics g = e.Graphics;
+            g.Clear(gb.Parent?.BackColor ?? ThemeBackground);
+
+            var card = new Rectangle(0, 0, gb.Width - 1, gb.Height - 1);
+            using (var fill = new SolidBrush(ThemeCard))
+            using (var border = new Pen(ThemeBorder))
+            {
+                g.FillRectangle(fill, card);
+                g.DrawRectangle(border, card);
+            }
+
+            Size textSize = TextRenderer.MeasureText(gb.Text, gb.Font);
+            TextRenderer.DrawText(g, gb.Text, gb.Font, new Point(10, 2), ThemeHeader);
+
+            using (var accent = new SolidBrush(ThemePrimary))
+            {
+                g.FillRectangle(accent, 10, 2 + textSize.Height, Math.Max(28, textSize.Width), 2);
+            }
+        }
+
+        // Tab แบบแบนขนาดเท่ากัน: Tab ที่เลือกพื้น Delta Blue ตัวขาว
+        private void TabControl_DrawItem(object sender, DrawItemEventArgs e)
+        {
+            TabControl tc = (TabControl)sender;
+            bool selected = e.Index == tc.SelectedIndex;
+            Rectangle r = tc.GetTabRect(e.Index);
+
+            using (var back = new SolidBrush(selected ? ThemePrimary : ThemeTabIdle))
+            {
+                e.Graphics.FillRectangle(back, r);
+            }
+
+            using (var font = new Font(tc.Font, selected ? FontStyle.Bold : FontStyle.Regular))
+            {
+                TextRenderer.DrawText(e.Graphics, tc.TabPages[e.Index].Text, font, r,
+                    selected ? Color.White : ThemeText,
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
+            }
         }
 
         #endregion

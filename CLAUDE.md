@@ -48,6 +48,7 @@
 | 10-29 | ไม่ต้องการยิง API routing-check ก่อนทดสอบ | — | ลบ `CheckRoutingAndShowWarningAsync`; โหมด MES เหลือแค่ตรวจว่าเลือก Line/Station/MO ครบ (`IsMesSelectionComplete`) ไม่ครบ → Popup + M3030; ยังส่ง routing-update หลังทดสอบเหมือนเดิม |
 | 10-29 | ไม่รู้ว่าส่งอะไรไป MES / MES ตอบอะไร | ไม่มี Log | `SaveMesLog` เขียน `D:\Thermistor\yyyy\MM\dd\mes_log.txt` ทุกครั้งที่ส่ง routing-update (เวลา, URL, Payload, HTTP Status + Response หรือ Exception) |
 | 11-02 | SN ที่ส่ง MES ไม่ตรงกับที่สแกน เมื่อส่ง MES ไม่สำเร็จ | Popup "MES Update/Connection Error" เป็น Modal → Flow ค้าง ไม่สั่ง M3030, บาร์โค้ด/M3031 ระหว่างนั้นเลื่อน, Enter ของ USB Scanner กด OK | ลบ Popup ใน `SendRoutingUpdateAsync` → ป้ายสถานะ "MES Send Failed" + `mes_log.txt` แทน (Popup "Test Result: FAIL" คงไว้) |
+| 11-03 | UI ดูเก่า, Tab ซ้อนกัน, ไฟสถานะไม่มีสีตอนเปิดโปรแกรม | ใช้สไตล์ระบบ WinForms | ธีม Delta (Blue `#005EB8` / Navy `#002D5A`) ใน `ApplyTheme()`: แถบหัว `pnHeader` (สร้างตอน Runtime) + ย้ายไฟสถานะ PLC/Thermistor ขึ้นไป (วงกลม, เริ่มเป็นแดง), GroupBox วาดเป็นการ์ด, Tab แบบ OwnerDraw |
 
 ## ยังไม่ได้ทำ / ข้อควรรู้
 - PLC ต้องเคลียร์ M3031 เป็น 0 หลังดีดชิ้นงานออก ไม่งั้นโปรแกรมจะไม่รับชิ้นถัดไป
