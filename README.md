@@ -31,3 +31,4 @@
 - [2026-10-29 — เขียน Log สิ่งที่ส่งไป MES แยกไฟล์ (mes_log.txt)](changes/2026-10-29_mes-send-log.md)
 - [2026-11-02 — ส่ง MES ไม่สำเร็จ ไม่ต้องมี Popup (Popup FAIL คงไว้)](changes/2026-11-02_mes-error-no-popup.md)
 - [2026-11-03 — Form2: ปรับ UI ให้ทันสมัย โทนสี Delta Electronics](changes/2026-11-03_delta-modern-ui.md)
+- [2026-11-03 — นับ OK / NG ต่อกะ ตามการส่ง MES](changes/2026-11-03_shift-ok-ng-count.md)
