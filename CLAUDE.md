@@ -12,7 +12,7 @@
 
 ## Flow ชิ้นงานปัจจุบัน (ตั้งแต่ 2026-10-29)
 ```
-สแกน (USB / Keyence) → เก็บ SN ไว้ (_pendingBarcode)       PLC: M3031 = 1 (ชิ้นงานพร้อมที่ Station)
+[Auto] สแกน Keyence → เก็บ SN ไว้ (_pendingBarcode)       PLC: M3031 = 1 (ชิ้นงานพร้อมที่ Station)
                    └──────────── มีครบทั้งสองอย่าง (อะไรมาก่อนก็ได้) ───────────┘
   → SN = "ERROR"? → FAIL + M3030
   → (โหมด MES) ยังไม่เลือก Line / Station / MO → Popup + M3030 (ไม่ยิง routing-check แล้ว)
@@ -21,7 +21,7 @@
 ```
 - **M3031** (Coil 3031, `PlcPartReadyAddress`) = PLC แจ้งชิ้นงานพร้อม → สัญญาณเริ่มทดสอบ
 - **M3030** (Coil 3030, `PlcReleaseAddress`) = สั่ง PLC ดีดชิ้นงานออกจาก Station — ต้องส่งทุกครั้งที่ไม่ผ่าน/ผิดพลาด ยกเว้น: ผู้ใช้กด Stop, ยังไม่ผ่านการตรวจพนักงาน, PLC ไม่ได้เชื่อมต่อ
-- โหมด Manual / Auto (`cbManualAuto`) ต่างกันแค่แหล่งสแกน: Manual = USB + Keyence, Auto = Keyence เท่านั้น
+- โหมด Manual / Auto (`cbManualAuto`): **Manual** = Scanner USB เท่านั้น สแกนแล้วทดสอบทันที ไม่รอ M3031 (สแกนระหว่างทดสอบ → "Busy - Scan Again" ไม่เก็บไว้รอ), **Auto** = Keyence เท่านั้น ใช้ Flow ด้านบน (ตั้งแต่ 2026-11-09)
 - ปุ่ม Start บนหน้าจอ = ทดสอบ SN ใน `txtBarcode` ทันที (ไม่รอ M3031)
 - ต้องผ่านการตรวจพนักงาน (`txtEMPID` + Enter → API `operator-data`) ก่อนจึงสแกน/Start ได้
 
@@ -50,6 +50,7 @@
 | 11-02 | SN ที่ส่ง MES ไม่ตรงกับที่สแกน เมื่อส่ง MES ไม่สำเร็จ | Popup "MES Update/Connection Error" เป็น Modal → Flow ค้าง ไม่สั่ง M3030, บาร์โค้ด/M3031 ระหว่างนั้นเลื่อน, Enter ของ USB Scanner กด OK | ลบ Popup ใน `SendRoutingUpdateAsync` → ป้ายสถานะ "MES Send Failed" + `mes_log.txt` แทน (Popup "Test Result: FAIL" คงไว้) |
 | 11-03 | UI ดูเก่า, Tab ซ้อนกัน, ไฟสถานะไม่มีสีตอนเปิดโปรแกรม | ใช้สไตล์ระบบ WinForms | ธีม Delta (Blue `#005EB8` / Navy `#002D5A`) ใน `ApplyTheme()`: แถบหัว `pnHeader` (สร้างตอน Runtime) + ย้ายไฟสถานะ PLC/Thermistor ขึ้นไป (วงกลม, เริ่มเป็นแดง), GroupBox วาดเป็นการ์ด, Tab แบบ OwnerDraw |
 | 11-03 | ไม่รู้ยอด OK/NG ต่อกะ | — | นับเมื่อ routing-update สำเร็จ (HTTP 2xx) แสดงกลางแถบหัว, กะเช้า 07:40–19:10 / กะดึก 19:40–07:10 (ช่วงพักนับเข้ากะที่เพิ่งจบ), เก็บใน `shift_count.cfg` (`yyyy-MM-dd\|D/N\|OK\|NG`), ข้ามกะเริ่ม 0 |
+| 11-09 | Manual ต้องรอ M3031 และรับ Keyence ด้วย | Manual / Auto ใช้ Flow เดียวกัน | Manual รับเฉพาะ USB และทดสอบทันที (`StartPartAsync`) ไม่รอ M3031; Keyence ใน Manual ถูกทิ้ง; Auto เหมือนเดิม |
 
 ## ยังไม่ได้ทำ / ข้อควรรู้
 - PLC ต้องเคลียร์ M3031 เป็น 0 หลังดีดชิ้นงานออก ไม่งั้นโปรแกรมจะไม่รับชิ้นถัดไป

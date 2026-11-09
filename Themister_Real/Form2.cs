@@ -90,7 +90,7 @@ namespace Themister_Real
         private KeyenceScanner keyenceScanner = null;
         private bool isKeyenceConnecting = false;
 
-        // ---------------- cbManualAuto: Manual = Scanner USB + Keyence / Auto = Keyence เท่านั้น ----------------
+        // ---------------- cbManualAuto: Manual = Scanner USB เท่านั้น ทดสอบทันที / Auto = Keyence เท่านั้น รอ M3031 ----------------
         // M3031 = PLC แจ้งว่าชิ้นงานพร้อมที่ Station (สัญญาณเริ่มทดสอบ) / M3030 = สั่ง PLC ดีดชิ้นงานออก
         private const ushort PlcPartReadyAddress = 3031;
         private const ushort PlcReleaseAddress = 3030;
@@ -198,12 +198,31 @@ namespace Themister_Real
             }
         }
 
-        // ใช้ร่วมกันทั้ง Keyboard Wedge Scanner และ Keyence Scanner (LAN)
-        // สแกนแล้วยังไม่ทดสอบ — เก็บ SN ไว้รอ M3031 = 1 (ชิ้นงานพร้อมที่ Station) ก่อน
+        // ใช้ร่วมกันทั้ง Keyboard Wedge Scanner (Manual) และ Keyence Scanner (Auto)
+        // Manual: สแกนแล้วทดสอบทันที / Auto: เก็บ SN ไว้รอ M3031 = 1 (ชิ้นงานพร้อมที่ Station) ก่อน
         private async Task ProcessScannedBarcodeAsync(string scannedBarcode)
         {
             if (string.IsNullOrWhiteSpace(scannedBarcode)) return;
             scannedBarcode = scannedBarcode.Trim();
+
+            if (!IsAutoMode)
+            {
+                if (_isProcessingPart || isSequenceRunning)
+                {
+                    // ไม่มี M3031 มาเริ่มรอบถัดไป → ไม่เก็บไว้รอ ให้สแกนใหม่หลังทดสอบเสร็จ
+                    if (!string.Equals(scannedBarcode, _processingBarcode, StringComparison.OrdinalIgnoreCase))
+                    {
+                        UpdateSensorLabel("Busy - Scan Again", Color.Orange);
+                    }
+                    return;
+                }
+
+                SetBarcodeText(scannedBarcode);
+                if (!EnsureOperatorVerified()) return;
+
+                await StartPartAsync(scannedBarcode);
+                return;
+            }
 
             if (_isProcessingPart || isSequenceRunning)
             {
@@ -235,6 +254,9 @@ namespace Themister_Real
                 return;
             }
 
+            // โหมด Manual ไม่ใช้ M3031 เริ่มทดสอบ
+            if (!IsAutoMode) return;
+
             await TryStartPendingPartAsync();
         }
 
@@ -258,6 +280,11 @@ namespace Themister_Real
             string sn = _pendingBarcode;
             _pendingBarcode = null;
             _m3031CycleUsed = true;
+            await StartPartAsync(sn);
+        }
+
+        private async Task StartPartAsync(string sn)
+        {
             _isProcessingPart = true;
             _processingBarcode = sn;
             try
@@ -271,7 +298,7 @@ namespace Themister_Real
             }
         }
 
-        // M3031 = 1 แล้ว: ทดสอบ → ส่ง MES → M3030
+        // Auto: M3031 = 1 แล้ว / Manual: สแกนแล้ว → ทดสอบ → ส่ง MES → M3030
         // ทุกทางที่ไม่ได้ทดสอบ (บาร์โค้ด ERROR / ยังไม่เลือก Line, Station, MO) ต้องสั่ง M3030 ดีดชิ้นงานออก
         private async Task RunPartFlowAsync(string sn)
         {
@@ -3142,8 +3169,12 @@ namespace Themister_Real
             if (!this.IsHandleCreated || this.IsDisposed) return;
 
             // "ERROR" (อ่านไม่ออก) ส่งเข้า Flow เดียวกับ Scanner USB — พอ M3031 = 1 จะตั้ง FAIL และสั่ง M3030 ปล่อยชิ้นงาน
-            // รับจาก Keyence ได้ทั้งโหมด Manual และ Auto
-            this.BeginInvoke(new Action(async () => await ProcessScannedBarcodeAsync(barcode)));
+            // รับจาก Keyence เฉพาะโหมด Auto (Manual = Scanner USB เท่านั้น)
+            this.BeginInvoke(new Action(async () =>
+            {
+                if (!IsAutoMode) return;
+                await ProcessScannedBarcodeAsync(barcode);
+            }));
         }
 
         #endregion
