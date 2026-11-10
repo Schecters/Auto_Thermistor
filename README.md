@@ -34,3 +34,4 @@
 - [2026-11-03 — นับ OK / NG ต่อกะ ตามการส่ง MES](changes/2026-11-03_shift-ok-ng-count.md)
 - [2026-11-09 — โหมด Manual: รับเฉพาะ Scanner USB + ทดสอบทันทีไม่รอ M3031](changes/2026-11-09_manual-usb-only-no-m3031.md)
 - [2026-11-10 — โหมด Auto: ไม่รับ SN ซ้ำของชิ้นที่เพิ่งทดสอบเสร็จ](changes/2026-11-10_ignore-duplicate-finished-sn.md)
+- [2026-11-10 — โหมด Auto: M3031 มาแล้วทดสอบทันที รอ Barcode ก่อนส่ง MES + ส่ง MES ซ้ำ](changes/2026-11-10_auto-test-on-m3031-wait-barcode.md)
