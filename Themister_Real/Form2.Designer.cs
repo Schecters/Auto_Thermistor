@@ -128,6 +128,8 @@
             this.txtEMPID = new System.Windows.Forms.TextBox();
             this.label18 = new System.Windows.Forms.Label();
             this.cbMES = new System.Windows.Forms.ComboBox();
+            this.lbMesDelay = new System.Windows.Forms.Label();
+            this.numMesDelay = new System.Windows.Forms.NumericUpDown();
             this.txtSection = new System.Windows.Forms.TextBox();
             this.txtGroup = new System.Windows.Forms.TextBox();
             this.label12 = new System.Windows.Forms.Label();
@@ -152,6 +154,7 @@
             this.tabPage5.SuspendLayout();
             this.groupBox1.SuspendLayout();
             this.groupBox2.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.numMesDelay)).BeginInit();
             this.SuspendLayout();
             // 
             // cbLines
@@ -1150,6 +1153,8 @@
             this.groupBox2.Controls.Add(this.txtEMPID);
             this.groupBox2.Controls.Add(this.label18);
             this.groupBox2.Controls.Add(this.cbMES);
+            this.groupBox2.Controls.Add(this.lbMesDelay);
+            this.groupBox2.Controls.Add(this.numMesDelay);
             this.groupBox2.Controls.Add(this.txtSection);
             this.groupBox2.Controls.Add(this.txtGroup);
             this.groupBox2.Controls.Add(this.label12);
@@ -1212,7 +1217,34 @@
             this.cbMES.Name = "cbMES";
             this.cbMES.Size = new System.Drawing.Size(125, 21);
             this.cbMES.TabIndex = 17;
-            // 
+            //
+            // lbMesDelay
+            //
+            this.lbMesDelay.AutoSize = true;
+            this.lbMesDelay.Location = new System.Drawing.Point(65, 229);
+            this.lbMesDelay.Name = "lbMesDelay";
+            this.lbMesDelay.Size = new System.Drawing.Size(43, 13);
+            this.lbMesDelay.TabIndex = 21;
+            this.lbMesDelay.Text = "Delay :";
+            //
+            // numMesDelay
+            //
+            this.numMesDelay.DecimalPlaces = 1;
+            this.numMesDelay.Increment = new decimal(new int[] {
+            5,
+            0,
+            0,
+            65536});
+            this.numMesDelay.Location = new System.Drawing.Point(121, 225);
+            this.numMesDelay.Maximum = new decimal(new int[] {
+            60,
+            0,
+            0,
+            0});
+            this.numMesDelay.Name = "numMesDelay";
+            this.numMesDelay.Size = new System.Drawing.Size(125, 20);
+            this.numMesDelay.TabIndex = 22;
+            //
             // txtSection
             // 
             this.txtSection.Location = new System.Drawing.Point(121, 85);
@@ -1384,6 +1416,7 @@
             this.tabPage5.ResumeLayout(false);
             this.tabPage5.PerformLayout();
             this.groupBox1.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)(this.numMesDelay)).EndInit();
             this.groupBox2.ResumeLayout(false);
             this.groupBox2.PerformLayout();
             this.ResumeLayout(false);
@@ -1492,6 +1525,8 @@
         private System.Windows.Forms.Label label17;
         private System.Windows.Forms.Label lbPassFail;
         private System.Windows.Forms.ComboBox cbMES;
+        private System.Windows.Forms.Label lbMesDelay;
+        private System.Windows.Forms.NumericUpDown numMesDelay;
         private System.Windows.Forms.Label label18;
         private System.Windows.Forms.ComboBox cbPopup;
         private System.Windows.Forms.ComboBox comboBox2;

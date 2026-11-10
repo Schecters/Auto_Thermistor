@@ -63,6 +63,10 @@ namespace Themister_Real
         private const int PartBarcodeTimeoutMs = 10000;
         // ส่ง MES ไม่สำเร็จ → รอเท่านี้แล้วส่งซ้ำอีก 1 ครั้ง
         private const int MesRetryDelayMs = 500;
+        // เวลาที่ได้รับ SN — ใช้นับ Delay ก่อนส่ง MES (numMesDelay)
+        // _pendingBarcodeReceivedAt คู่กับ _pendingBarcode / _currentSnReceivedAt ของชิ้นที่กำลังทดสอบ (null = ไม่ต้องรอ)
+        private DateTime? _pendingBarcodeReceivedAt = null;
+        private DateTime? _currentSnReceivedAt = null;
 
         // ---------------- USB SCPI DMM (Picotest M3521A / M3522A, Chroma 12061) ----------------
         private SafeFileHandle usbDeviceHandle = null;
@@ -94,6 +98,7 @@ namespace Themister_Real
         private readonly string lineStationConfigFilePath = Path.Combine(Application.StartupPath, "line_station_config.cfg");
         private readonly string keyenceConfigFilePath = Path.Combine(Application.StartupPath, "keyence_config.cfg");
         private readonly string thermistorConfigFilePath = Path.Combine(Application.StartupPath, "thermistor_config.cfg");
+        private readonly string mesDelayConfigFilePath = Path.Combine(Application.StartupPath, "mes_delay.cfg");
 
         // ---------------- Keyence Barcode Scanner (SR-X100W / TCP Data Port) ----------------
         private KeyenceScanner keyenceScanner = null;
@@ -229,7 +234,7 @@ namespace Themister_Real
                 SetBarcodeText(scannedBarcode);
                 if (!EnsureOperatorVerified()) return;
 
-                await StartPartAsync(scannedBarcode);
+                await StartPartAsync(scannedBarcode, DateTime.Now);
                 return;
             }
 
@@ -246,6 +251,7 @@ namespace Themister_Real
             if (_isProcessingPart && _processingBarcode == null)
             {
                 _processingBarcode = scannedBarcode;
+                _currentSnReceivedAt = DateTime.Now;
                 SetBarcodeText(scannedBarcode);
                 _partBarcodeWaiter?.TrySetResult(scannedBarcode);
                 return;
@@ -257,6 +263,7 @@ namespace Themister_Real
                 if (!string.Equals(scannedBarcode, _processingBarcode, StringComparison.OrdinalIgnoreCase))
                 {
                     _pendingBarcode = scannedBarcode;
+                    _pendingBarcodeReceivedAt = DateTime.Now;
                 }
                 return;
             }
@@ -266,6 +273,7 @@ namespace Themister_Real
             if (!EnsureOperatorVerified()) return;
 
             _pendingBarcode = scannedBarcode;
+            _pendingBarcodeReceivedAt = DateTime.Now;
             await TryStartPendingPartAsync();
         }
 
@@ -300,15 +308,19 @@ namespace Themister_Real
 
             // null = Barcode ยังไม่มา → RunSequenceAsync จะรอ SN หลังทดสอบเสร็จ
             string sn = _pendingBarcode;
+            DateTime? snReceivedAt = _pendingBarcodeReceivedAt;
             _pendingBarcode = null;
+            _pendingBarcodeReceivedAt = null;
             _m3031CycleUsed = true;
-            await StartPartAsync(sn);
+            await StartPartAsync(sn, snReceivedAt);
         }
 
-        private async Task StartPartAsync(string sn)
+        // snReceivedAt = เวลาที่ได้รับ SN (null = ยังไม่มี SN) ใช้นับ Delay ก่อนส่ง MES
+        private async Task StartPartAsync(string sn, DateTime? snReceivedAt)
         {
             _isProcessingPart = true;
             _processingBarcode = sn;
+            _currentSnReceivedAt = snReceivedAt;
             try
             {
                 await RunPartFlowAsync(sn);
@@ -321,7 +333,21 @@ namespace Themister_Real
                 _isProcessingPart = false;
                 _processingBarcode = null;
                 _partBarcodeWaiter = null;
+                _currentSnReceivedAt = null;
             }
+        }
+
+        // ส่ง MES ได้เมื่อเลยเวลา "ได้รับ SN + Delay (numMesDelay)" แล้ว — ทดสอบนานกว่า Delay → ไม่ต้องรอเพิ่ม
+        // กด Stop ระหว่างรอ → OperationCanceledException (ไม่สั่ง M3030 ตามกติกา)
+        private async Task WaitMesDelayAsync(CancellationToken token)
+        {
+            if (_currentSnReceivedAt == null) return;
+
+            TimeSpan remaining = _currentSnReceivedAt.Value.AddSeconds((double)numMesDelay.Value) - DateTime.Now;
+            if (remaining <= TimeSpan.Zero) return;
+
+            UpdateSensorLabel("MES Delay...", Color.Orange);
+            await Task.Delay(remaining, token);
         }
 
         // รอ SN ของชิ้นที่ทดสอบเสร็จแล้ว (Auto ที่เริ่มจาก M3031 ก่อน Barcode มา)
@@ -1161,6 +1187,9 @@ namespace Themister_Real
             LoadThermistorSettings();
             StartDmmRealtimeMonitor();
 
+            LoadMesDelaySettings();
+            numMesDelay.ValueChanged += (s, ev) => SaveMesDelaySettings();
+
             await LoadAllLinesAndStationsAsync();
             RestoreLastSelectedLineAndStation();
             await LoadStepRecipesAsync();
@@ -1516,6 +1545,7 @@ namespace Themister_Real
             cbStations.Enabled = isSettingUnlocked && cbStations.Items.Count > 0;
             cbMO.Enabled = isSettingUnlocked && cbMO.Items.Count > 0;
             cbMES.Enabled = isSettingUnlocked;
+            numMesDelay.Enabled = isSettingUnlocked;
             btSetting.Text = isSettingUnlocked ? "Lock" : "Setting";
         }
 
@@ -1827,7 +1857,16 @@ namespace Themister_Real
                 return;
             }
 
-            await RunSequenceAsync(null);
+            // ปุ่ม Start นับ Delay ก่อนส่ง MES จากตอนกด
+            _currentSnReceivedAt = DateTime.Now;
+            try
+            {
+                await RunSequenceAsync(null);
+            }
+            finally
+            {
+                _currentSnReceivedAt = null;
+            }
         }
 
         // sn = null → ใช้ค่าใน txtBarcode / waitForBarcode = true (Auto, M3031 มาก่อน Barcode) → ทดสอบก่อน แล้วรอ SN ก่อนส่ง MES
@@ -2021,6 +2060,7 @@ namespace Themister_Real
                     {
                         if (isMesMode)
                         {
+                            await WaitMesDelayAsync(ctsSequence.Token);
                             await SendRoutingUpdateWithRetryAsync(jsonPayload, overallPass);
                         }
 
@@ -2032,6 +2072,7 @@ namespace Themister_Real
                         {
                             if (isMesMode)
                             {
+                                await WaitMesDelayAsync(ctsSequence.Token);
                                 await SendRoutingUpdateWithRetryAsync(jsonPayload, overallPass);
                             }
 
@@ -2051,6 +2092,7 @@ namespace Themister_Real
 
                             if (confirm == DialogResult.OK && isMesMode)
                             {
+                                await WaitMesDelayAsync(ctsSequence.Token);
                                 await SendRoutingUpdateWithRetryAsync(jsonPayload, overallPass);
                             }
 
@@ -3147,6 +3189,30 @@ namespace Themister_Real
             try
             {
                 File.WriteAllLines(keyenceConfigFilePath, new[] { txtIPKeynce.Text.Trim(), txtPortKeynce.Text.Trim() });
+            }
+            catch { }
+        }
+
+        // Delay ก่อนส่ง MES (วินาที) เก็บใน mes_delay.cfg — ใช้ InvariantCulture ให้จุดทศนิยมเป็น "." เสมอ
+        private void LoadMesDelaySettings()
+        {
+            try
+            {
+                if (File.Exists(mesDelayConfigFilePath) &&
+                    decimal.TryParse(File.ReadAllText(mesDelayConfigFilePath).Trim(), System.Globalization.NumberStyles.Number,
+                                     System.Globalization.CultureInfo.InvariantCulture, out decimal seconds))
+                {
+                    numMesDelay.Value = Math.Max(numMesDelay.Minimum, Math.Min(numMesDelay.Maximum, seconds));
+                }
+            }
+            catch { }
+        }
+
+        private void SaveMesDelaySettings()
+        {
+            try
+            {
+                File.WriteAllText(mesDelayConfigFilePath, numMesDelay.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
             }
             catch { }
         }
