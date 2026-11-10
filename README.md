@@ -33,3 +33,4 @@
 - [2026-11-03 — Form2: ปรับ UI ให้ทันสมัย โทนสี Delta Electronics](changes/2026-11-03_delta-modern-ui.md)
 - [2026-11-03 — นับ OK / NG ต่อกะ ตามการส่ง MES](changes/2026-11-03_shift-ok-ng-count.md)
 - [2026-11-09 — โหมด Manual: รับเฉพาะ Scanner USB + ทดสอบทันทีไม่รอ M3031](changes/2026-11-09_manual-usb-only-no-m3031.md)
+- [2026-11-10 — โหมด Auto: ไม่รับ SN ซ้ำของชิ้นที่เพิ่งทดสอบเสร็จ](changes/2026-11-10_ignore-duplicate-finished-sn.md)
