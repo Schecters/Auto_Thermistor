@@ -54,6 +54,9 @@ namespace Themister_Real
         // กำลังทดสอบชิ้นงานที่เริ่มจาก M3031
         private bool _isProcessingPart = false;
         private string _processingBarcode = null;
+        // SN ของชิ้นที่ทดสอบเสร็จล่าสุด — Keyence อาจส่งค่าซ้ำของชิ้นนี้มาหลังทดสอบเสร็จ
+        // (MES Bridge relay ถือ QR ไว้จนส่ง MES เสร็จ) ถ้าไม่กันไว้ SN นี้จะถูกใช้กับชิ้นถัดไป
+        private string _lastFinishedBarcode = null;
 
         // ---------------- USB SCPI DMM (Picotest M3521A / M3522A, Chroma 12061) ----------------
         private SafeFileHandle usbDeviceHandle = null;
@@ -224,6 +227,15 @@ namespace Themister_Real
                 return;
             }
 
+            // ค่าซ้ำของชิ้นที่เพิ่งทดสอบเสร็จ (Keyence อ่านซ้ำแต่ค่ามาถึงหลังทดสอบเสร็จ) → ทิ้ง
+            // ไม่งั้นจะถูกเก็บใน _pendingBarcode แล้วไปใช้กับชิ้นถัดไป ทำให้ SN เหลื่อมไปเรื่อย ๆ
+            // "ERROR" ไม่กัน เพราะต้อง FAIL + M3030 ทุกครั้ง
+            if (!string.Equals(scannedBarcode, "ERROR", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(scannedBarcode, _lastFinishedBarcode, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
             if (_isProcessingPart || isSequenceRunning)
             {
                 // สแกนซ้ำชิ้นที่กำลังทำอยู่ → ไม่สนใจ / ชิ้นอื่น → เก็บไว้รอ M3031 รอบถัดไป
@@ -293,6 +305,8 @@ namespace Themister_Real
             }
             finally
             {
+                // จำ SN ที่เพิ่งเสร็จไว้กันค่าซ้ำจาก Keyence ที่มาช้า (ดู ProcessScannedBarcodeAsync)
+                _lastFinishedBarcode = sn;
                 _isProcessingPart = false;
                 _processingBarcode = null;
             }
