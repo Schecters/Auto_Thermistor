@@ -1897,8 +1897,8 @@ namespace Themister_Real
         }
 
         // sn = null → ใช้ค่าใน txtBarcode / waitForBarcode = true (Auto, M3031 มาก่อน Barcode) → ทดสอบก่อน แล้วรอ SN ก่อนส่ง MES
-        // useMesQueue = true (Auto) → PASS: M3030 ทันที + เข้าคิวส่ง MES / FAIL: ไม่สั่ง M3030
-        // ทุกทางที่จบด้วย Popup ไม่ผ่าน/ผิดพลาด สั่ง M3030 ดีดชิ้นงานออก ยกเว้นผู้ใช้กด Stop เอง และ FAIL ในโหมด Auto
+        // useMesQueue = true (Auto) → PASS: M3030 ทันที + เข้าคิวส่ง MES / FAIL: Popup → M3030 หลังกดยืนยัน, No Popup → ไม่สั่ง M3030
+        // ทุกทางที่จบด้วย Popup ไม่ผ่าน/ผิดพลาด สั่ง M3030 ดีดชิ้นงานออก ยกเว้นผู้ใช้กด Stop เอง และ FAIL แบบ No Popup ในโหมด Auto
         private async Task RunSequenceAsync(string sn, bool waitForBarcode = false, bool useMesQueue = false)
         {
             if (isSequenceRunning)
@@ -2094,15 +2094,15 @@ namespace Themister_Real
                         }
                         else
                         {
-                            // FAIL → ไม่สั่ง M3030 ชิ้นงานค้างไว้ให้คนเอาออก / ส่ง MES ตาม cbPopup เหมือนเดิม
-                            UpdateSensorLabel("FAIL - Remove Part", Color.Red);
-
+                            // FAIL: ส่ง MES ตาม cbPopup เหมือนเดิม
+                            // Popup → คนกดยืนยันแล้ว (OK / Cancel) สั่ง M3030 ดีดชิ้นงานออก
+                            // No Popup → ไม่สั่ง M3030 ชิ้นงานค้างไว้ให้คนเอาออก
                             bool enqueueFail = isMesMode;
                             if (hasPopup)
                             {
                                 string confirmMsg = isMesMode
-                                    ? $"ผลการทดสอบ: FAIL (ชิ้นงานไม่ผ่านเกณฑ์)\nSN: {currentSn}\n\nต้องการส่งผล FAIL ไปยังระบบ MES หรือไม่?\n(กด OK เพื่อส่งผล FAIL / กด Cancel เพื่อไม่ส่ง — ทั้งสองกรณีจะไม่ปล่อยชิ้นงานออก กรุณานำชิ้นงานออกเอง)"
-                                    : $"ผลการทดสอบ: FAIL (ชิ้นงานไม่ผ่านเกณฑ์)\nSN: {currentSn}\n\nโหมด No MES: ชิ้นงานจะไม่ถูกปล่อยออก กรุณานำชิ้นงานออกเอง";
+                                    ? $"ผลการทดสอบ: FAIL (ชิ้นงานไม่ผ่านเกณฑ์)\nSN: {currentSn}\n\nต้องการส่งผล FAIL ไปยังระบบ MES หรือไม่?\n(กด OK เพื่อส่งผล FAIL / กด Cancel เพื่อไม่ส่ง — ทั้งสองกรณีจะปล่อยชิ้นงานออก)"
+                                    : $"ผลการทดสอบ: FAIL (ชิ้นงานไม่ผ่านเกณฑ์)\nSN: {currentSn}\n\nโหมด No MES: กด OK หรือ Cancel เพื่อยืนยันรับทราบและปล่อยงาน";
 
                                 DialogResult confirm = MessageBox.Show(
                                     confirmMsg,
@@ -2111,6 +2111,11 @@ namespace Themister_Real
                                     MessageBoxIcon.Warning);
 
                                 enqueueFail = isMesMode && confirm == DialogResult.OK;
+                                await TriggerPlcM3030Async();
+                            }
+                            else
+                            {
+                                UpdateSensorLabel("FAIL - Remove Part", Color.Red);
                             }
 
                             if (enqueueFail) EnqueueMesSend(currentSn, false, jsonPayload, _currentSnReceivedAt);
