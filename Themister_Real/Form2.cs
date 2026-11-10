@@ -1897,8 +1897,8 @@ namespace Themister_Real
         }
 
         // sn = null → ใช้ค่าใน txtBarcode / waitForBarcode = true (Auto, M3031 มาก่อน Barcode) → ทดสอบก่อน แล้วรอ SN ก่อนส่ง MES
-        // useMesQueue = true (Auto) → PASS: M3030 ทันที + เข้าคิวส่ง MES / FAIL: Popup → M3030 หลังกดยืนยัน, No Popup → ไม่สั่ง M3030
-        // ทุกทางที่จบด้วย Popup ไม่ผ่าน/ผิดพลาด สั่ง M3030 ดีดชิ้นงานออก ยกเว้นผู้ใช้กด Stop เอง และ FAIL แบบ No Popup ในโหมด Auto
+        // useMesQueue = true (Auto) → PASS / FAIL: M3030 (FAIL + Popup สั่งหลังกดยืนยัน) แล้วเข้าคิวส่ง MES ตาม Delay
+        // ทุกทางที่จบด้วย Popup ไม่ผ่าน/ผิดพลาด สั่ง M3030 ดีดชิ้นงานออก ยกเว้นผู้ใช้กด Stop เอง
         private async Task RunSequenceAsync(string sn, bool waitForBarcode = false, bool useMesQueue = false)
         {
             if (isSequenceRunning)
@@ -2094,9 +2094,8 @@ namespace Themister_Real
                         }
                         else
                         {
-                            // FAIL: ส่ง MES ตาม cbPopup เหมือนเดิม
-                            // Popup → คนกดยืนยันแล้ว (OK / Cancel) สั่ง M3030 ดีดชิ้นงานออก
-                            // No Popup → ไม่สั่ง M3030 ชิ้นงานค้างไว้ให้คนเอาออก
+                            // FAIL: ส่ง MES ตาม cbPopup เหมือนเดิม แล้วสั่ง M3030 ดีดชิ้นงานออกให้ทดสอบชิ้นถัดไปได้
+                            // Popup → สั่งหลังกดยืนยัน (OK / Cancel) / No Popup → สั่งทันที
                             bool enqueueFail = isMesMode;
                             if (hasPopup)
                             {
@@ -2111,13 +2110,9 @@ namespace Themister_Real
                                     MessageBoxIcon.Warning);
 
                                 enqueueFail = isMesMode && confirm == DialogResult.OK;
-                                await TriggerPlcM3030Async();
-                            }
-                            else
-                            {
-                                UpdateSensorLabel("FAIL - Remove Part", Color.Red);
                             }
 
+                            await TriggerPlcM3030Async();
                             if (enqueueFail) EnqueueMesSend(currentSn, false, jsonPayload, _currentSnReceivedAt);
                         }
                     }
