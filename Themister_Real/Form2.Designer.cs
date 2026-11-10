@@ -130,6 +130,7 @@
             this.cbMES = new System.Windows.Forms.ComboBox();
             this.lbMesDelay = new System.Windows.Forms.Label();
             this.numMesDelay = new System.Windows.Forms.NumericUpDown();
+            this.dgvMesQueue = new System.Windows.Forms.DataGridView();
             this.txtSection = new System.Windows.Forms.TextBox();
             this.txtGroup = new System.Windows.Forms.TextBox();
             this.label12 = new System.Windows.Forms.Label();
@@ -155,6 +156,7 @@
             this.groupBox1.SuspendLayout();
             this.groupBox2.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.numMesDelay)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.dgvMesQueue)).BeginInit();
             this.SuspendLayout();
             // 
             // cbLines
@@ -1155,6 +1157,7 @@
             this.groupBox2.Controls.Add(this.cbMES);
             this.groupBox2.Controls.Add(this.lbMesDelay);
             this.groupBox2.Controls.Add(this.numMesDelay);
+            this.groupBox2.Controls.Add(this.dgvMesQueue);
             this.groupBox2.Controls.Add(this.txtSection);
             this.groupBox2.Controls.Add(this.txtGroup);
             this.groupBox2.Controls.Add(this.label12);
@@ -1244,6 +1247,21 @@
             this.numMesDelay.Name = "numMesDelay";
             this.numMesDelay.Size = new System.Drawing.Size(125, 20);
             this.numMesDelay.TabIndex = 22;
+            //
+            // dgvMesQueue
+            //
+            this.dgvMesQueue.AllowUserToAddRows = false;
+            this.dgvMesQueue.AllowUserToDeleteRows = false;
+            this.dgvMesQueue.AllowUserToResizeRows = false;
+            this.dgvMesQueue.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            this.dgvMesQueue.Location = new System.Drawing.Point(25, 258);
+            this.dgvMesQueue.MultiSelect = false;
+            this.dgvMesQueue.Name = "dgvMesQueue";
+            this.dgvMesQueue.ReadOnly = true;
+            this.dgvMesQueue.RowHeadersVisible = false;
+            this.dgvMesQueue.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.FullRowSelect;
+            this.dgvMesQueue.Size = new System.Drawing.Size(650, 190);
+            this.dgvMesQueue.TabIndex = 23;
             //
             // txtSection
             // 
@@ -1417,6 +1435,7 @@
             this.tabPage5.PerformLayout();
             this.groupBox1.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.numMesDelay)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.dgvMesQueue)).EndInit();
             this.groupBox2.ResumeLayout(false);
             this.groupBox2.PerformLayout();
             this.ResumeLayout(false);
@@ -1527,6 +1546,7 @@
         private System.Windows.Forms.ComboBox cbMES;
         private System.Windows.Forms.Label lbMesDelay;
         private System.Windows.Forms.NumericUpDown numMesDelay;
+        private System.Windows.Forms.DataGridView dgvMesQueue;
         private System.Windows.Forms.Label label18;
         private System.Windows.Forms.ComboBox cbPopup;
         private System.Windows.Forms.ComboBox comboBox2;

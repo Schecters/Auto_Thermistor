@@ -68,6 +68,23 @@ namespace Themister_Real
         private DateTime? _pendingBarcodeReceivedAt = null;
         private DateTime? _currentSnReceivedAt = null;
 
+        // ---------------- คิวส่ง MES (เฉพาะ Auto): PASS สั่ง M3030 ทันที แล้วส่ง MES เมื่อครบ "ได้รับ QR + Delay" ----------------
+        // ชิ้นถัดไปทดสอบได้เลยไม่ต้องรอคิว / แสดงใน dgvMesQueue / อยู่ในหน่วยความจำ ปิดโปรแกรมแล้วหาย
+        private class PendingMesItem
+        {
+            public string Sn;
+            public bool IsPass;
+            public string JsonPayload;
+            public DateTime DueAt;
+            public DataGridViewRow Row;
+            public bool IsSending;
+            public bool IsDone;
+        }
+        private readonly List<PendingMesItem> _mesQueue = new List<PendingMesItem>();
+        private readonly System.Windows.Forms.Timer _mesQueueTimer = new System.Windows.Forms.Timer { Interval = 200 };
+        // เก็บแถวในตารางคิวไม่เกินเท่านี้ (ลบแถวที่ส่งเสร็จแล้วเก่าสุดก่อน)
+        private const int MesQueueMaxRows = 50;
+
         // ---------------- USB SCPI DMM (Picotest M3521A / M3522A, Chroma 12061) ----------------
         private SafeFileHandle usbDeviceHandle = null;
         private IntPtr winUsbHandle = IntPtr.Zero;
@@ -402,7 +419,8 @@ namespace Themister_Real
                 return;
             }
 
-            await RunSequenceAsync(sn, waitForBarcode: sn == null);
+            // Auto: PASS สั่ง M3030 ทันที แล้วเข้าคิวส่ง MES ตาม Delay / Manual: แบบเดิม
+            await RunSequenceAsync(sn, waitForBarcode: sn == null, useMesQueue: IsAutoMode);
         }
 
         private void SetBarcodeText(string barcode)
@@ -689,28 +707,8 @@ namespace Themister_Real
             ApplyThemeToChildren(this);
             BuildHeaderBar();
 
-            if (dgvSensorResults != null)
-            {
-                // พื้นที่ว่างใต้แถวสีอ่อนกว่าการ์ดเล็กน้อย ให้เห็นขอบเขตตารางโดยไม่ต้องมีเส้นขอบ
-                dgvSensorResults.BackgroundColor = ThemeBackground;
-                dgvSensorResults.BorderStyle = BorderStyle.None;
-                dgvSensorResults.GridColor = ThemeGridLine;
-                dgvSensorResults.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
-                dgvSensorResults.EnableHeadersVisualStyles = false;
-                dgvSensorResults.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
-                dgvSensorResults.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
-                dgvSensorResults.ColumnHeadersHeight = 36;
-                dgvSensorResults.ColumnHeadersDefaultCellStyle.BackColor = ThemeHeader;
-                dgvSensorResults.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
-                dgvSensorResults.ColumnHeadersDefaultCellStyle.SelectionBackColor = ThemeHeader;
-                dgvSensorResults.ColumnHeadersDefaultCellStyle.Font = new Font(ThemeFontName, dgvSensorResults.Font.Size, FontStyle.Bold);
-                dgvSensorResults.ColumnHeadersDefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
-                dgvSensorResults.DefaultCellStyle.ForeColor = ThemeText;
-                dgvSensorResults.DefaultCellStyle.SelectionBackColor = Color.FromArgb(214, 232, 250);
-                dgvSensorResults.DefaultCellStyle.SelectionForeColor = ThemeText;
-                dgvSensorResults.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
-                dgvSensorResults.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(247, 250, 253);
-            }
+            if (dgvSensorResults != null) StyleDataGrid(dgvSensorResults);
+            if (dgvMesQueue != null) StyleDataGrid(dgvMesQueue);
 
             if (lbSensorValue != null)
             {
@@ -762,6 +760,30 @@ namespace Themister_Real
             lbPassFail.Text = "READY";
             lbPassFail.ForeColor = Color.White;
             lbPassFail.BackColor = ThemeNeutral;
+        }
+
+        // สไตล์ตารางร่วมกัน (dgvSensorResults, dgvMesQueue)
+        private void StyleDataGrid(DataGridView dgv)
+        {
+            // พื้นที่ว่างใต้แถวสีอ่อนกว่าการ์ดเล็กน้อย ให้เห็นขอบเขตตารางโดยไม่ต้องมีเส้นขอบ
+            dgv.BackgroundColor = ThemeBackground;
+            dgv.BorderStyle = BorderStyle.None;
+            dgv.GridColor = ThemeGridLine;
+            dgv.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
+            dgv.EnableHeadersVisualStyles = false;
+            dgv.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
+            dgv.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
+            dgv.ColumnHeadersHeight = 36;
+            dgv.ColumnHeadersDefaultCellStyle.BackColor = ThemeHeader;
+            dgv.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
+            dgv.ColumnHeadersDefaultCellStyle.SelectionBackColor = ThemeHeader;
+            dgv.ColumnHeadersDefaultCellStyle.Font = new Font(ThemeFontName, dgv.Font.Size, FontStyle.Bold);
+            dgv.ColumnHeadersDefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
+            dgv.DefaultCellStyle.ForeColor = ThemeText;
+            dgv.DefaultCellStyle.SelectionBackColor = Color.FromArgb(214, 232, 250);
+            dgv.DefaultCellStyle.SelectionForeColor = ThemeText;
+            dgv.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
+            dgv.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(247, 250, 253);
         }
 
         private void ApplyThemeToChildren(Control parent)
@@ -1189,6 +1211,11 @@ namespace Themister_Real
 
             LoadMesDelaySettings();
             numMesDelay.ValueChanged += (s, ev) => SaveMesDelaySettings();
+
+            SetupMesQueueGrid();
+            _mesQueueTimer.Tick += MesQueueTimer_Tick;
+            _mesQueueTimer.Start();
+            this.FormClosing += Form2_FormClosing;
 
             await LoadAllLinesAndStationsAsync();
             RestoreLastSelectedLineAndStation();
@@ -1870,8 +1897,9 @@ namespace Themister_Real
         }
 
         // sn = null → ใช้ค่าใน txtBarcode / waitForBarcode = true (Auto, M3031 มาก่อน Barcode) → ทดสอบก่อน แล้วรอ SN ก่อนส่ง MES
-        // ทุกทางที่จบด้วย Popup ไม่ผ่าน/ผิดพลาด สั่ง M3030 ดีดชิ้นงานออก ยกเว้นผู้ใช้กด Stop เอง
-        private async Task RunSequenceAsync(string sn, bool waitForBarcode = false)
+        // useMesQueue = true (Auto) → PASS: M3030 ทันที + เข้าคิวส่ง MES / FAIL: ไม่สั่ง M3030
+        // ทุกทางที่จบด้วย Popup ไม่ผ่าน/ผิดพลาด สั่ง M3030 ดีดชิ้นงานออก ยกเว้นผู้ใช้กด Stop เอง และ FAIL ในโหมด Auto
+        private async Task RunSequenceAsync(string sn, bool waitForBarcode = false, bool useMesQueue = false)
         {
             if (isSequenceRunning)
             {
@@ -2056,7 +2084,39 @@ namespace Themister_Real
                     }
                     bool hasPopup = string.Equals(popupMode, "Popup", StringComparison.OrdinalIgnoreCase);
 
-                    if (overallPass)
+                    if (useMesQueue)
+                    {
+                        if (overallPass)
+                        {
+                            // ได้ QR + PASS → ปล่อยชิ้นงานทันที ส่ง MES ทีหลังตาม Delay (ชิ้นถัดไปเข้ามาทดสอบได้เลย)
+                            await TriggerPlcM3030Async();
+                            if (isMesMode) EnqueueMesSend(currentSn, true, jsonPayload, _currentSnReceivedAt);
+                        }
+                        else
+                        {
+                            // FAIL → ไม่สั่ง M3030 ชิ้นงานค้างไว้ให้คนเอาออก / ส่ง MES ตาม cbPopup เหมือนเดิม
+                            UpdateSensorLabel("FAIL - Remove Part", Color.Red);
+
+                            bool enqueueFail = isMesMode;
+                            if (hasPopup)
+                            {
+                                string confirmMsg = isMesMode
+                                    ? $"ผลการทดสอบ: FAIL (ชิ้นงานไม่ผ่านเกณฑ์)\nSN: {currentSn}\n\nต้องการส่งผล FAIL ไปยังระบบ MES หรือไม่?\n(กด OK เพื่อส่งผล FAIL / กด Cancel เพื่อไม่ส่ง — ทั้งสองกรณีจะไม่ปล่อยชิ้นงานออก กรุณานำชิ้นงานออกเอง)"
+                                    : $"ผลการทดสอบ: FAIL (ชิ้นงานไม่ผ่านเกณฑ์)\nSN: {currentSn}\n\nโหมด No MES: ชิ้นงานจะไม่ถูกปล่อยออก กรุณานำชิ้นงานออกเอง";
+
+                                DialogResult confirm = MessageBox.Show(
+                                    confirmMsg,
+                                    "Test Result: FAIL",
+                                    MessageBoxButtons.OKCancel,
+                                    MessageBoxIcon.Warning);
+
+                                enqueueFail = isMesMode && confirm == DialogResult.OK;
+                            }
+
+                            if (enqueueFail) EnqueueMesSend(currentSn, false, jsonPayload, _currentSnReceivedAt);
+                        }
+                    }
+                    else if (overallPass)
                     {
                         if (isMesMode)
                         {
@@ -4043,6 +4103,135 @@ namespace Themister_Real
             await Task.Delay(MesRetryDelayMs);
             return await SendRoutingUpdateAsync(jsonPayload, isPass);
         }
+
+        #region คิวส่ง MES (Auto)
+
+        private void SetupMesQueueGrid()
+        {
+            dgvMesQueue.Columns.Clear();
+            dgvMesQueue.Columns.Add("colQSn", "QR Code");
+            dgvMesQueue.Columns.Add("colQResult", "Result");
+            dgvMesQueue.Columns.Add("colQValues", "Values");
+            dgvMesQueue.Columns.Add("colQRemain", "Send in (s)");
+            dgvMesQueue.Columns.Add("colQStatus", "Status");
+
+            dgvMesQueue.Columns["colQSn"].Width = 150;
+            dgvMesQueue.Columns["colQResult"].Width = 60;
+            dgvMesQueue.Columns["colQRemain"].Width = 80;
+            dgvMesQueue.Columns["colQStatus"].Width = 80;
+            dgvMesQueue.Columns["colQValues"].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+            dgvMesQueue.Columns["colQValues"].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleLeft;
+
+            foreach (DataGridViewColumn col in dgvMesQueue.Columns)
+            {
+                col.SortMode = DataGridViewColumnSortMode.NotSortable;
+            }
+        }
+
+        // ค่าที่วัดได้แต่ละ Step ของชิ้นที่เพิ่งทดสอบ ("Step=ค่า, ...") — ดึงตอนเข้าคิว ก่อนชิ้นถัดไปล้างตาราง
+        private string GetMeasuredValuesSummary()
+        {
+            if (dgvSensorResults == null) return "";
+
+            List<string> values = new List<string>();
+            foreach (DataGridViewRow row in dgvSensorResults.Rows)
+            {
+                if (row.IsNewRow) continue;
+                string step = row.Cells["colStep"].Value?.ToString() ?? "";
+                string measured = row.Cells["colMeasured"].Value?.ToString() ?? "";
+                values.Add($"{step}={measured}");
+            }
+            return string.Join(", ", values);
+        }
+
+        // เข้าคิวรอส่ง MES เมื่อครบ "เวลาได้รับ QR + Delay" (Delay ใช้ค่า ณ ตอนเข้าคิว)
+        private void EnqueueMesSend(string sn, bool isPass, string jsonPayload, DateTime? snReceivedAt)
+        {
+            var item = new PendingMesItem
+            {
+                Sn = sn,
+                IsPass = isPass,
+                JsonPayload = jsonPayload,
+                DueAt = (snReceivedAt ?? DateTime.Now).AddSeconds((double)numMesDelay.Value)
+            };
+
+            dgvMesQueue.Rows.Insert(0, sn, isPass ? "PASS" : "FAIL", GetMeasuredValuesSummary(), "", "Waiting");
+            item.Row = dgvMesQueue.Rows[0];
+            item.Row.Cells["colQResult"].Style.ForeColor = isPass ? ThemeSuccess : ThemeDanger;
+
+            _mesQueue.Add(item);
+            UpdateMesQueueRemaining(item);
+            TrimMesQueueRows();
+        }
+
+        // ลบแถวเก่าสุดที่ส่งเสร็จแล้ว ให้ตารางไม่เกิน MesQueueMaxRows (แถวที่ยังไม่ส่งไม่ลบ)
+        private void TrimMesQueueRows()
+        {
+            while (dgvMesQueue.Rows.Count > MesQueueMaxRows)
+            {
+                PendingMesItem oldestDone = _mesQueue.Find(q => q.IsDone);
+                if (oldestDone == null) break;
+
+                dgvMesQueue.Rows.Remove(oldestDone.Row);
+                _mesQueue.Remove(oldestDone);
+            }
+        }
+
+        private void UpdateMesQueueRemaining(PendingMesItem item)
+        {
+            double remaining = Math.Max(0, (item.DueAt - DateTime.Now).TotalSeconds);
+            item.Row.Cells["colQRemain"].Value = remaining.ToString("0.0");
+        }
+
+        // ทำงานบน UI Thread ทุก 200 ms: นับถอยหลัง และส่งรายการที่ถึงเวลา
+        private void MesQueueTimer_Tick(object sender, EventArgs e)
+        {
+            foreach (PendingMesItem item in new List<PendingMesItem>(_mesQueue))
+            {
+                if (item.IsSending || item.IsDone) continue;
+
+                UpdateMesQueueRemaining(item);
+                if (DateTime.Now >= item.DueAt)
+                {
+                    _ = SendQueuedMesAsync(item);
+                }
+            }
+        }
+
+        private async Task SendQueuedMesAsync(PendingMesItem item)
+        {
+            item.IsSending = true;
+            item.Row.Cells["colQStatus"].Value = "Sending";
+
+            bool success = await SendRoutingUpdateWithRetryAsync(item.JsonPayload, item.IsPass);
+
+            item.IsSending = false;
+            item.IsDone = true;
+            item.Row.Cells["colQRemain"].Value = "0.0";
+            item.Row.Cells["colQStatus"].Value = success ? "Sent" : "Failed";
+            item.Row.Cells["colQStatus"].Style.ForeColor = success ? ThemeSuccess : ThemeDanger;
+            TrimMesQueueRows();
+        }
+
+        // ยังมีรายการรอส่ง MES → ถามก่อนปิด (คิวอยู่ในหน่วยความจำ ปิดแล้วรายการหาย)
+        private void Form2_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            int pending = _mesQueue.FindAll(q => !q.IsDone).Count;
+            if (pending == 0) return;
+
+            DialogResult confirm = MessageBox.Show(
+                $"ยังมี {pending} รายการที่รอส่ง MES\nถ้าปิดโปรแกรมตอนนี้ รายการเหล่านี้จะไม่ถูกส่ง\n\nต้องการปิดโปรแกรมหรือไม่?",
+                "MES Queue",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning);
+
+            if (confirm != DialogResult.Yes)
+            {
+                e.Cancel = true;
+            }
+        }
+
+        #endregion
 
         private void UpdatePassFailLabel(bool isPass)
         {
