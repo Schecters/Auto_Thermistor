@@ -10,13 +10,15 @@
 - `Form2.cs` ใช้ Line ending แบบ CRLF
 - Build: `MSBuild Themister_Real\Themister_Real.csproj /p:Configuration=Debug` (ไฟล์ `.pfx` ไม่อยู่ใน repo — ถ้า Signing พังให้สร้าง Test Certificate ใหม่)
 
-## Flow ชิ้นงานปัจจุบัน (ตั้งแต่ 2026-10-29)
+## Flow ชิ้นงานปัจจุบัน (ตั้งแต่ 2026-11-10)
 ```
-[Auto] สแกน Keyence → เก็บ SN ไว้ (_pendingBarcode)       PLC: M3031 = 1 (ชิ้นงานพร้อมที่ Station)
-                   └──────────── มีครบทั้งสองอย่าง (อะไรมาก่อนก็ได้) ───────────┘
-  → SN = "ERROR"? → FAIL + M3030
+[Auto] PLC: M3031 = 1 (ชิ้นงานพร้อมที่ Station) → เริ่มทันที ไม่รอ Barcode
+  → SN ที่สแกนมาก่อน (_pendingBarcode) = "ERROR"? → FAIL + M3030
   → (โหมด MES) ยังไม่เลือก Line / Station / MO → Popup + M3030 (ไม่ยิง routing-check แล้ว)
-  → ทดสอบตาม Step → PASS: ส่ง routing-update + M3030 / FAIL: Popup (OK = ส่ง MES, Cancel = ไม่ส่ง) + M3030
+  → ทดสอบตาม Step (Keyence สแกนมาระหว่างนี้ → เป็น SN ของชิ้นนี้)
+  → ยังไม่มี SN → "Waiting Barcode..." รอสูงสุด 10 วิ (ไม่มา → FAIL "No Barcode", ได้ "ERROR" → FAIL — ไม่ส่ง MES + M3030)
+  → PASS: ส่ง routing-update + M3030 / FAIL: Popup (OK = ส่ง MES, Cancel = ไม่ส่ง) + M3030
+     (ส่ง MES ไม่สำเร็จ → รอ 0.5 วิ ส่งซ้ำ 1 ครั้ง แล้วค่อย M3030)
   → PLC ดีดชิ้นงานออก → M3031 = 0 → รับชิ้นถัดไป (1 รอบ M3031 ON = 1 ชิ้น)
 ```
 - **M3031** (Coil 3031, `PlcPartReadyAddress`) = PLC แจ้งชิ้นงานพร้อม → สัญญาณเริ่มทดสอบ
@@ -51,10 +53,13 @@
 | 11-03 | UI ดูเก่า, Tab ซ้อนกัน, ไฟสถานะไม่มีสีตอนเปิดโปรแกรม | ใช้สไตล์ระบบ WinForms | ธีม Delta (Blue `#005EB8` / Navy `#002D5A`) ใน `ApplyTheme()`: แถบหัว `pnHeader` (สร้างตอน Runtime) + ย้ายไฟสถานะ PLC/Thermistor ขึ้นไป (วงกลม, เริ่มเป็นแดง), GroupBox วาดเป็นการ์ด, Tab แบบ OwnerDraw |
 | 11-03 | ไม่รู้ยอด OK/NG ต่อกะ | — | นับเมื่อ routing-update สำเร็จ (HTTP 2xx) แสดงกลางแถบหัว, กะเช้า 07:40–19:10 / กะดึก 19:40–07:10 (ช่วงพักนับเข้ากะที่เพิ่งจบ), เก็บใน `shift_count.cfg` (`yyyy-MM-dd\|D/N\|OK\|NG`), ข้ามกะเริ่ม 0 |
 | 11-09 | Manual ต้องรอ M3031 และรับ Keyence ด้วย | Manual / Auto ใช้ Flow เดียวกัน | Manual รับเฉพาะ USB และทดสอบทันที (`StartPartAsync`) ไม่รอ M3031; Keyence ใน Manual ถูกทิ้ง; Auto เหมือนเดิม |
+| 11-10 | Auto บางครั้งใช้ SN ของชิ้นก่อนหน้า แล้วเหลื่อมไปเรื่อย ๆ | Keyence ส่งค่าซ้ำมาหลังทดสอบเสร็จ (MES Bridge relay ถือ QR ไว้) จึงเข้า `_pendingBarcode` | จำ `_lastFinishedBarcode` ทิ้งค่าซ้ำของชิ้นที่เพิ่งเสร็จ (ยกเว้น "ERROR") |
+| 11-10 | Auto รอ Barcode ก่อนทดสอบ เสียเวลา / ส่ง MES พลาดครั้งเดียวก็จบ | ต้องมี SN + M3031 ครบก่อนเริ่ม | M3031 = 1 → ทดสอบทันที แล้วรอ SN หลังทดสอบ (`WaitForPartBarcodeAsync`, 10 วิ); ส่ง MES ไม่สำเร็จ → รอ 0.5 วิ ส่งซ้ำ 1 ครั้ง (`SendRoutingUpdateWithRetryAsync`) แล้วจึง M3030 |
 
 ## ยังไม่ได้ทำ / ข้อควรรู้
 - PLC ต้องเคลียร์ M3031 เป็น 0 หลังดีดชิ้นงานออก ไม่งั้นโปรแกรมจะไม่รับชิ้นถัดไป
 - Flow M3031 → M3030 แบบใหม่ (10-29) Build ผ่านแล้ว แต่ยังไม่ได้ทดสอบกับ PLC จริง
+- Flow Auto "M3031 แล้วทดสอบทันที รอ SN ทีหลัง + ส่ง MES ซ้ำ" (11-10) Build ผ่านแล้ว แต่ยังไม่ได้ทดสอบกับ PLC / Keyence จริง
 - Popup "Test Result: FAIL" ยังเป็น Modal — ถ้าสแกนด้วย USB ตอน Popup เปิด Enter ของ Scanner จะกด OK (ส่ง FAIL ไป MES) และบาร์โค้ดนั้นหาย
 - ข้อเสนอค้างจาก 10-15:
   - ใช้ `HttpClient` ตัวเดียวร่วมกัน

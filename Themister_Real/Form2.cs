@@ -57,6 +57,12 @@ namespace Themister_Real
         // SN ของชิ้นที่ทดสอบเสร็จล่าสุด — Keyence อาจส่งค่าซ้ำของชิ้นนี้มาหลังทดสอบเสร็จ
         // (MES Bridge relay ถือ QR ไว้จนส่ง MES เสร็จ) ถ้าไม่กันไว้ SN นี้จะถูกใช้กับชิ้นถัดไป
         private string _lastFinishedBarcode = null;
+        // Auto: M3031 มาก่อน Barcode → ทดสอบไปก่อน แล้วรอ SN ของชิ้นนี้ผ่านตัวนี้ก่อนส่ง MES
+        private TaskCompletionSource<string> _partBarcodeWaiter = null;
+        // รอ Barcode หลังทดสอบเสร็จได้นานสุดเท่านี้ ไม่มา → FAIL + M3030 ไม่ให้ไลน์ค้าง
+        private const int PartBarcodeTimeoutMs = 10000;
+        // ส่ง MES ไม่สำเร็จ → รอเท่านี้แล้วส่งซ้ำอีก 1 ครั้ง
+        private const int MesRetryDelayMs = 500;
 
         // ---------------- USB SCPI DMM (Picotest M3521A / M3522A, Chroma 12061) ----------------
         private SafeFileHandle usbDeviceHandle = null;
@@ -236,6 +242,15 @@ namespace Themister_Real
                 return;
             }
 
+            // ชิ้นที่กำลังทดสอบ (เริ่มจาก M3031) ยังไม่มี SN → ค่านี้คือ SN ของชิ้นนี้
+            if (_isProcessingPart && _processingBarcode == null)
+            {
+                _processingBarcode = scannedBarcode;
+                SetBarcodeText(scannedBarcode);
+                _partBarcodeWaiter?.TrySetResult(scannedBarcode);
+                return;
+            }
+
             if (_isProcessingPart || isSequenceRunning)
             {
                 // สแกนซ้ำชิ้นที่กำลังทำอยู่ → ไม่สนใจ / ชิ้นอื่น → เก็บไว้รอ M3031 รอบถัดไป
@@ -272,7 +287,7 @@ namespace Themister_Real
             await TryStartPendingPartAsync();
         }
 
-        // เริ่ม Flow ชิ้นงานเมื่อมีทั้ง SN ที่สแกนแล้ว และ M3031 = 1 (ไม่สนว่าอะไรมาก่อน)
+        // เริ่ม Flow ชิ้นงานทันทีเมื่อ M3031 = 1 — ยังไม่มี SN ก็ทดสอบไปก่อน แล้วรอ SN ก่อนส่ง MES
         private async Task TryStartPendingPartAsync()
         {
             if (_isProcessingPart || isSequenceRunning) return;
@@ -283,12 +298,7 @@ namespace Themister_Real
                 return;
             }
 
-            if (_pendingBarcode == null)
-            {
-                UpdateSensorLabel("Waiting Barcode...", Color.Orange);
-                return;
-            }
-
+            // null = Barcode ยังไม่มา → RunSequenceAsync จะรอ SN หลังทดสอบเสร็จ
             string sn = _pendingBarcode;
             _pendingBarcode = null;
             _m3031CycleUsed = true;
@@ -306,9 +316,32 @@ namespace Themister_Real
             finally
             {
                 // จำ SN ที่เพิ่งเสร็จไว้กันค่าซ้ำจาก Keyence ที่มาช้า (ดู ProcessScannedBarcodeAsync)
-                _lastFinishedBarcode = sn;
+                // ใช้ _processingBarcode เพราะ SN อาจมาถึงระหว่างทดสอบ (sn ตอนเริ่มเป็น null)
+                _lastFinishedBarcode = _processingBarcode;
                 _isProcessingPart = false;
                 _processingBarcode = null;
+                _partBarcodeWaiter = null;
+            }
+        }
+
+        // รอ SN ของชิ้นที่ทดสอบเสร็จแล้ว (Auto ที่เริ่มจาก M3031 ก่อน Barcode มา)
+        // คืน null เมื่อหมดเวลา / กด Stop → OperationCanceledException
+        private async Task<string> WaitForPartBarcodeAsync(CancellationToken token)
+        {
+            if (_processingBarcode != null) return _processingBarcode;
+
+            UpdateSensorLabel("Waiting Barcode...", Color.Orange);
+            var waiter = new TaskCompletionSource<string>();
+            _partBarcodeWaiter = waiter;
+            try
+            {
+                Task finished = await Task.WhenAny(waiter.Task, Task.Delay(PartBarcodeTimeoutMs, token));
+                token.ThrowIfCancellationRequested();
+                return finished == waiter.Task ? waiter.Task.Result : null;
+            }
+            finally
+            {
+                _partBarcodeWaiter = null;
             }
         }
 
@@ -325,6 +358,7 @@ namespace Themister_Real
                 return;
             }
 
+            // sn = null (M3031 มาก่อน Barcode) → เช็ก "ERROR" หลังทดสอบเสร็จใน RunSequenceAsync แทน
             if (string.Equals(sn, "ERROR", StringComparison.OrdinalIgnoreCase))
             {
                 UpdatePassFailLabel(false);
@@ -342,7 +376,7 @@ namespace Themister_Real
                 return;
             }
 
-            await RunSequenceAsync(sn);
+            await RunSequenceAsync(sn, waitForBarcode: sn == null);
         }
 
         private void SetBarcodeText(string barcode)
@@ -1796,9 +1830,9 @@ namespace Themister_Real
             await RunSequenceAsync(null);
         }
 
-        // sn = null → ใช้ค่าใน txtBarcode
+        // sn = null → ใช้ค่าใน txtBarcode / waitForBarcode = true (Auto, M3031 มาก่อน Barcode) → ทดสอบก่อน แล้วรอ SN ก่อนส่ง MES
         // ทุกทางที่จบด้วย Popup ไม่ผ่าน/ผิดพลาด สั่ง M3030 ดีดชิ้นงานออก ยกเว้นผู้ใช้กด Stop เอง
-        private async Task RunSequenceAsync(string sn)
+        private async Task RunSequenceAsync(string sn, bool waitForBarcode = false)
         {
             if (isSequenceRunning)
             {
@@ -1823,7 +1857,12 @@ namespace Themister_Real
             }
 
             string currentSn = sn;
-            if (currentSn == null)
+            if (waitForBarcode)
+            {
+                // SN ของชิ้นนี้ยังไม่มา → ล้างช่องไว้ ไม่ให้ค่าชิ้นก่อนหน้าค้างบนจอ
+                SetBarcodeText("");
+            }
+            else if (currentSn == null)
             {
                 currentSn = "";
                 Control[] foundBarcode = this.Controls.Find("txtBarcode", true);
@@ -1920,6 +1959,30 @@ namespace Themister_Real
 
                 if (!ctsSequence.Token.IsCancellationRequested)
                 {
+                    bool hasValidSn = true;
+                    if (waitForBarcode)
+                    {
+                        // ทดสอบเสร็จแล้ว → รอ SN จาก Keyence ก่อนส่ง MES (กด Stop ระหว่างรอ → เข้า catch OperationCanceledException)
+                        currentSn = await WaitForPartBarcodeAsync(ctsSequence.Token);
+
+                        if (currentSn == null)
+                        {
+                            // Barcode ไม่มาภายในเวลา → FAIL ไม่ส่ง MES
+                            hasValidSn = false;
+                            currentSn = "";
+                            UpdateSensorLabel("No Barcode", Color.Red);
+                        }
+                        else if (string.Equals(currentSn, "ERROR", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // Keyence อ่านไม่ออก → FAIL ไม่ส่ง MES
+                            hasValidSn = false;
+                            UpdateSensorLabel("Barcode Error", Color.Red);
+                        }
+                    }
+
+                    // ไม่มี SN ที่ใช้ได้ → บันทึก Log ผลวัดไว้ แล้ว FAIL + M3030 โดยไม่ส่ง MES
+                    if (!hasValidSn) overallPass = false;
+
                     string jsonPayload = BuildUpdateRouteJson(currentSn, overallPass);
 
                     try
@@ -1937,6 +2000,12 @@ namespace Themister_Real
                     UpdatePassFailLabel(overallPass);
                     hasResult = true;
 
+                    if (!hasValidSn)
+                    {
+                        await TriggerPlcM3030Async();
+                        return;
+                    }
+
                     string mesMode = cbMES.SelectedItem?.ToString() ?? "MES";
                     bool isMesMode = string.Equals(mesMode, "MES", StringComparison.OrdinalIgnoreCase);
 
@@ -1952,7 +2021,7 @@ namespace Themister_Real
                     {
                         if (isMesMode)
                         {
-                            await SendRoutingUpdateAsync(jsonPayload, overallPass);
+                            await SendRoutingUpdateWithRetryAsync(jsonPayload, overallPass);
                         }
 
                         await TriggerPlcM3030Async();
@@ -1963,7 +2032,7 @@ namespace Themister_Real
                         {
                             if (isMesMode)
                             {
-                                await SendRoutingUpdateAsync(jsonPayload, overallPass);
+                                await SendRoutingUpdateWithRetryAsync(jsonPayload, overallPass);
                             }
 
                             await TriggerPlcM3030Async();
@@ -1982,7 +2051,7 @@ namespace Themister_Real
 
                             if (confirm == DialogResult.OK && isMesMode)
                             {
-                                await SendRoutingUpdateAsync(jsonPayload, overallPass);
+                                await SendRoutingUpdateWithRetryAsync(jsonPayload, overallPass);
                             }
 
                             await TriggerPlcM3030Async();
@@ -3897,6 +3966,16 @@ namespace Themister_Real
                 UpdateSensorLabel("MES Send Failed", Color.Red);
                 return false;
             }
+        }
+
+        // ส่ง MES ไม่สำเร็จ (ไม่ได้ HTTP 2xx / Exception = ยอดไม่ถูกนับ) → รอ 0.5 วินาที ส่งซ้ำอีก 1 ครั้ง
+        // ทั้งสองรอบเขียน mes_log.txt และ AddShiftCount นับเฉพาะรอบที่สำเร็จ จึงไม่นับซ้ำ
+        private async Task<bool> SendRoutingUpdateWithRetryAsync(string jsonPayload, bool isPass)
+        {
+            if (await SendRoutingUpdateAsync(jsonPayload, isPass)) return true;
+
+            await Task.Delay(MesRetryDelayMs);
+            return await SendRoutingUpdateAsync(jsonPayload, isPass);
         }
 
         private void UpdatePassFailLabel(bool isPass)
