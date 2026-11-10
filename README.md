@@ -36,3 +36,4 @@
 - [2026-11-10 — โหมด Auto: ไม่รับ SN ซ้ำของชิ้นที่เพิ่งทดสอบเสร็จ](changes/2026-11-10_ignore-duplicate-finished-sn.md)
 - [2026-11-10 — โหมด Auto: M3031 มาแล้วทดสอบทันที รอ Barcode ก่อนส่ง MES + ส่ง MES ซ้ำ](changes/2026-11-10_auto-test-on-m3031-wait-barcode.md)
 - [2026-11-10 — ตั้ง Delay ก่อนส่ง MES นับจากตอนได้รับ QR Code](changes/2026-11-10_mes-send-delay.md)
+- [2026-11-10 — โหมด Auto: PASS สั่ง M3030 ทันที ส่ง MES ทีหลังตาม Delay (คิว) + ตารางคิว](changes/2026-11-10_auto-mes-queue.md)
